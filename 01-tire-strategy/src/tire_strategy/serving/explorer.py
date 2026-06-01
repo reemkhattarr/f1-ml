@@ -58,6 +58,8 @@ SECTIONS: list[Section] = [
         "Every lap: lap + sector times, speed-trap speeds, position, pit stops, tyres.",
         RAW_LAPS_PATH,
         (
+            "year",
+            "circuit",
             "Driver",
             "Team",
             "LapNumber",
@@ -93,6 +95,8 @@ SECTIONS: list[Section] = [
         "Track + air temperature, humidity, pressure, wind and rain over each session.",
         WEATHER_PATH,
         (
+            "year",
+            "circuit",
             "Time",
             "AirTemp",
             "TrackTemp",
@@ -109,6 +113,8 @@ SECTIONS: list[Section] = [
         "Finishing position, grid, status, points, laps and qualifying times per driver.",
         RESULTS_PATH,
         (
+            "year",
+            "circuit",
             "Abbreviation",
             "TeamName",
             "Position",
@@ -154,18 +160,23 @@ def _options(section: Section, column: str | None) -> list[str]:
 
 
 def view(section: Section, year: str, circuit: str, driver: str, max_rows: int):
-    """Filtered, display-friendly view of one section plus a row/column summary."""
-    df = _load(str(section.path))
-    if section.columns:
-        df = cast(pd.DataFrame, df[[c for c in section.columns if c in df.columns]])
-    df = df.copy()
+    """Filtered, display-friendly view of one section plus a row/column summary.
+
+    Filtering happens on the *full* frame first; the display-column subset is
+    applied only afterwards. (Subsetting first would drop the year/circuit/driver
+    columns the filters key on, silently turning every filter into a no-op.)
+    """
+    df = _load(str(section.path)).copy()
 
     if section.year_col and year not in (None, _ALL) and section.year_col in df.columns:
         df = cast(pd.DataFrame, df[df[section.year_col].astype(str) == str(year)])
     if section.circuit_col and circuit not in (None, _ALL) and section.circuit_col in df.columns:
-        df = cast(pd.DataFrame, df[df[section.circuit_col] == circuit])
+        df = cast(pd.DataFrame, df[df[section.circuit_col].astype(str) == str(circuit)])
     if section.driver_col and driver not in (None, _ALL) and section.driver_col in df.columns:
-        df = cast(pd.DataFrame, df[df[section.driver_col] == driver])
+        df = cast(pd.DataFrame, df[df[section.driver_col].astype(str) == str(driver)])
+
+    if section.columns:
+        df = cast(pd.DataFrame, df[[c for c in section.columns if c in df.columns]])
 
     floats = df.select_dtypes("float").columns
     df[floats] = df[floats].round(3)
