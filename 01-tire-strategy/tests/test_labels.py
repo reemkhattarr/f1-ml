@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from tire_strategy.data import build_labels, load_labelled_race
+from tire_strategy.data.labels import add_pit_window_label
 
 
 def _toy() -> pd.DataFrame:
@@ -66,6 +67,25 @@ def test_retiree_final_lap_excluded() -> None:
     assert bool(c.iloc[-1]["train_eligible"]) is False
     # The earlier C lap is still a valid stay-out decision.
     assert bool(c.iloc[0]["train_eligible"]) is True
+
+
+def test_pit_window_label_looks_forward_within_race() -> None:
+    df = pd.DataFrame(
+        {
+            "year": [2024] * 7,
+            "round": [1, 1, 1, 1, 1, 2, 2],
+            "driver": ["A", "A", "A", "A", "A", "A", "A"],
+            "lap_number": [1, 2, 3, 4, 5, 1, 2],
+            # Round 1: pit on lap 3. Round 2: pit on lap 1.
+            "label_pit": [0, 0, 1, 0, 0, 1, 0],
+        }
+    )
+    out = add_pit_window_label(df, horizon=3).sort_values(["round", "lap_number"])
+    r1 = out[out["round"] == 1]["label_pit_window"].tolist()
+    # laps 1-3 are within 3 of the lap-3 stop; laps 4-5 are not.
+    assert r1 == [1, 1, 1, 0, 0]
+    # Round-2's lap-1 stop must NOT leak back into round 1's lap 5.
+    assert out[(out["round"] == 1) & (out["lap_number"] == 5)]["label_pit_window"].iloc[0] == 0
 
 
 @pytest.mark.integration
