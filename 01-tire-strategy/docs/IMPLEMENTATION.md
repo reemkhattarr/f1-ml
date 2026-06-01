@@ -461,6 +461,23 @@ rate) is redundant for a tree that already has `circuit`, so it was not pursued.
 remaining, and `laps_remaining` is already a feature (an explicit "fuel kg" is just
 a rescaling of it).
 
+15. **Training-data scope — does adding 2025 (and older history) help?**
+    (`experiments season-scope`, logged in `experiments/RESULTS.md`). 2025 is the
+    newest season, so it can only be judged indirectly: a grouped-CV pool ablation
+    plus forward-chaining temporal holdouts (fixed test = 2025).
+    - *Grouped CV (trustworthy):* adding 2025 to the 2022–2024 pool lowers the pit
+      cost slightly (0.326 → 0.322) and, more importantly, **tightens the estimate
+      sharply** (fold std 0.039 → 0.0095); pit AP improves 0.334 → 0.348. Going
+      further back to all years (2018–2025) helps cost marginally but *hurts* AP
+      (0.348 → 0.307) and compound accuracy (0.665 → 0.624 vs 0.649 for 2022–2025).
+    - *Temporal holdout (test = 2025):* the model beats both baselines on 2025, and
+      a larger/newer training window monotonically lowers strategic cost
+      (0.342 → 0.330 → 0.325 as we grow train 22–23 → 22–24 → 18–24).
+    - **Decision:** the modern ground-effect era (**2022 onward**) is the sweet spot.
+      Adding 2025 is a measured net win for the pit head; pre-2022 data (different
+      tyres/regulations, sparse 2020) adds noise to the compound head. Recommend
+      expanding the production split to train 2022–2024 / hold out 2025.
+
 **Other things tried and discarded along the way:** the MLflow file store (deprecated
 → switched to SQLite); `black` (superseded by `ruff format`); `CalibratedClassifierCV(cv="prefit")`
 (removed in sklearn 1.6 → `FrozenEstimator`).
