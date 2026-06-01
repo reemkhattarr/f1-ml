@@ -160,6 +160,64 @@ def probability_curve(bundle: ModelBundle, year: int, circuit: str, driver: str)
     return fig
 
 
+# F1 tyre-compound colours (slicks + wets) for the strategy timeline.
+_COMPOUND_COLORS = {
+    "SOFT": "#e8413b",
+    "MEDIUM": "#f5d23a",
+    "HARD": "#dcdcdc",
+    "INTERMEDIATE": "#43a047",
+    "WET": "#1e6fd6",
+    "UNKNOWN": "#999999",
+}
+
+
+def strategy_timeline(year: int, circuit: str, driver: str):
+    """The driver's actual tyre strategy: each stint as a compound-coloured bar
+    across the laps, pit stops at the joins, and any wet laps banded on top."""
+    table = race_table(year, circuit)
+    sub = cast(pd.DataFrame, table[table["driver"] == driver]).sort_values("lap_number")
+    if sub.empty:
+        return None
+
+    fig, ax = plt.subplots(figsize=(8, 1.9))
+    seen: set[str] = set()
+    for _, grp in sub.groupby("stint"):
+        comp = str(grp["compound"].iloc[0])
+        start, end = int(grp["lap_number"].min()), int(grp["lap_number"].max())
+        ax.barh(
+            0,
+            end - start + 1,
+            left=start - 0.5,
+            height=0.6,
+            color=_COMPOUND_COLORS.get(comp, "#999999"),
+            edgecolor="black",
+            linewidth=0.6,
+            label=comp if comp not in seen else None,
+        )
+        seen.add(comp)
+        ax.text((start + end) / 2, 0, comp[0], ha="center", va="center", fontsize=9)
+
+    rain_laps = sub.loc[sub["rainfall"].fillna(False).astype(bool), "lap_number"].tolist()
+    for i, lap in enumerate(rain_laps):
+        ax.axvspan(
+            lap - 0.5,
+            lap + 0.5,
+            ymin=0.82,
+            ymax=0.98,
+            color="#1e6fd6",
+            alpha=0.5,
+            label="rain" if i == 0 else None,
+        )
+
+    ax.set_ylim(-0.6, 1.0)
+    ax.set_yticks([])
+    ax.set_xlabel("Lap")
+    ax.set_title(f"{driver} tyre strategy — {circuit} {year}")
+    ax.legend(loc="upper right", fontsize=7, ncol=6)
+    fig.tight_layout()
+    return fig
+
+
 def _format(pred: dict) -> str:
     if not pred:
         return "_No data for this lap._"
@@ -198,6 +256,7 @@ def build_demo():  # pragma: no cover - UI wiring
                 lap = gr.Slider(1, 78, step=1, value=1, label="Lap")
                 out = gr.Markdown()
                 plot = gr.Plot()
+                timeline = gr.Plot()
             with gr.Column(scale=1):
                 gr.Markdown("### Final classification")
                 results = gr.Dataframe(interactive=False, wrap=True, max_height=520)
@@ -216,14 +275,18 @@ def build_demo():  # pragma: no cover - UI wiring
 
         def _predict(yr, ci, dr, lp):
             if not dr:
-                return "_Load a race and pick a driver._", None
+                return "_Load a race and pick a driver._", None, None
             pred = lap_prediction(bundle, yr, ci, dr, int(lp))
-            return _format(pred), probability_curve(bundle, yr, ci, dr)
+            return (
+                _format(pred),
+                probability_curve(bundle, yr, ci, dr),
+                strategy_timeline(yr, ci, dr),
+            )
 
         year.change(_on_year, [year], [circuit])
         load_btn.click(_load, [year, circuit], [driver, notes, results])
         for ctrl in (driver, lap):
-            ctrl.change(_predict, [year, circuit, driver, lap], [out, plot])
+            ctrl.change(_predict, [year, circuit, driver, lap], [out, plot, timeline])
 
     return demo
 
