@@ -1,0 +1,65 @@
+name: Refresh F1 data & redeploy
+
+# Keeps the model dataset and demo Space current as new races happen.
+#
+# Opt-in: it runs only on a manual trigger until you uncomment the `schedule`
+# block below, and it needs an `HF_TOKEN` repository secret (a Hugging Face write
+# token) under Settings -> Secrets and variables -> Actions.
+#
+# See docs at 01-tire-strategy/docs/DATA_UPDATES.md.
+
+on:
+  workflow_dispatch: {}
+  # Uncomment to run automatically every Monday at 09:00 UTC (after most races):
+  # schedule:
+  #   - cron: "0 9 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Cache FastF1 downloads
+        uses: actions/cache@v4
+        with:
+          path: 01-tire-strategy/data/cache
+          key: fastf1-cache-${{ github.run_id }}
+          restore-keys: fastf1-cache-
+
+      - name: Sync dependencies
+        run: uv sync --all-packages
+
+      - name: Incrementally refresh the model dataset + retrain + rebuild bundle
+        run: |
+          # Mirrors `just refresh` (inlined so the runner needs no `just` binary).
+          uv run python -m tire_strategy.data.dataset --update 2022 2023 2024 2025 2026
+          uv run python -m tire_strategy.train
+          uv run python 01-tire-strategy/deploy/build_space.py
+
+      - name: Deploy the demo Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::warning::HF_TOKEN not set — skipping deploy. See docs/DATA_UPDATES.md."
+            exit 0
+          fi
+          uv run hf upload reemkhattar/f1-tire-strategy \
+            01-tire-strategy/deploy/space_build . --repo-type space --token "$HF_TOKEN"
