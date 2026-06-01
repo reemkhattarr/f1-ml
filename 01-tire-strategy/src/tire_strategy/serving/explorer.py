@@ -21,6 +21,24 @@ from tire_strategy.simulator.data import STINT_PATH
 
 _ALL = "All"
 
+# Clean sans-serif everywhere; force table headers + cells onto a single line and
+# scroll horizontally instead of wrapping a word across lines.
+_CSS = """
+.gradio-container, .gradio-container * {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif !important;
+}
+.gradio-container table th, .gradio-container table td {
+  white-space: nowrap !important;
+  text-overflow: ellipsis;
+  max-width: 320px;
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+}
+.gradio-container table th { font-weight: 600 !important; }
+.gradio-container .table-wrap, .gradio-container div[class*="table"] { overflow-x: auto !important; }
+"""
+
 
 @dataclass(frozen=True)
 class Section:
@@ -157,7 +175,8 @@ def view(section: Section, year: str, circuit: str, driver: str, max_rows: int):
 def build_explorer():  # pragma: no cover - UI wiring
     import gradio as gr
 
-    with gr.Blocks(theme=gr.themes.Soft(), title="00 - F1 Data Explorer") as demo:  # type: ignore[attr-defined]
+    theme = gr.themes.Soft()  # type: ignore[attr-defined]
+    with gr.Blocks(theme=theme, css=_CSS, title="00 - F1 Data Explorer") as demo:
         gr.Markdown(
             "# 🏎️ F1 Data Explorer\n"
             "The raw F1 timing data behind the portfolio. Pick a tab, then filter by "
