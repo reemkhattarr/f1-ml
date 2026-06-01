@@ -481,7 +481,26 @@ a rescaling of it).
     - **Decision:** the modern ground-effect era (**2022 onward**) is the sweet spot.
       Adding 2025 is a measured net win for the pit head; pre-2022 data (different
       tyres/regulations, sparse 2020) adds noise to the compound head. Recommend
-      expanding the production split to train 2022–2024 / hold out 2025.
+      expanding the production split to train 2022–2024 / hold out 2025. **Shipped.**
+16. **Team / constructor feature (`experiments team-feature`, grouped CV 2022–2025):**
+    do teams follow learnable strategy patterns? Added `team` as a categorical to
+    both heads. **Pit head:** negligible (cost 0.3224 → 0.3222, AP 0.3479 → 0.3499 —
+    within noise, fold std slightly worse). **Compound head:** a small but consistent
+    gain — accuracy 0.6492 → 0.6588 (+1.0pp), macro-F1 0.6166 → 0.6263 (+1.0pp).
+    Reading: *when* to pit is driven by tyre/race state, not team identity, but *which
+    compound* is mildly team-flavoured (constructor tyre preferences). A candidate to
+    adopt into the compound head only, pending a per-fold consistency check.
+17. **Cost-ratio robustness (`experiments cost-ratio`, grouped CV 2022–2025):** the
+    model beats both baselines at **every** missed:spurious ratio from 2:1 to 10:1
+    (e.g. 5:1 → model 0.322 vs never-pit 0.457 vs rule 0.441; 10:1 → 0.499 vs 0.913
+    vs 0.784). The win is not an artefact of the 5:1 choice. Logged for the record.
+18. **Wet↔dry regime feasibility (`experiments wet-regime`, 2022–2025 scoping):** of
+    92 races, **12 (13%)** saw wet tyres; **6,406 wet laps (6.3%)**; **253 slick↔wet
+    crossovers** (95 slick→wet, 158 wet→slick). Enough signal to exploit the *onset*
+    (dry→rain) cheaply via leak-safe rain-transition features on the existing pit head
+    (rain is an observable condition, not timing-derived, so it does not leak), and
+    only adopt on a measured, non-harmful CV result. A full wet-tyre *compound* model
+    stays a separate, deferred build (track-drying time is unobservable in public data).
 
 **Other things tried and discarded along the way:** the MLflow file store (deprecated
 → switched to SQLite); `black` (superseded by `ruff format`); `CalibratedClassifierCV(cv="prefit")`

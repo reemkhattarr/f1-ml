@@ -25,6 +25,8 @@ import logging
 import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from functools import lru_cache
+from itertools import pairwise
 from pathlib import Path
 from typing import cast
 
@@ -39,7 +41,11 @@ from tire_strategy.models.baselines import (
     MostFrequentCompound,
     RuleBasedBaseline,
 )
-from tire_strategy.models.cv import cross_validate_compound, cross_validate_pit
+from tire_strategy.models.cv import (
+    cost_ratio_sweep,
+    cross_validate_compound,
+    cross_validate_pit,
+)
 from tire_strategy.models.metrics import (
     DEFAULT_COST_FN,
     DEFAULT_COST_FP,
@@ -52,6 +58,10 @@ from tire_strategy.models.pipeline import (
     build_compound_pipeline,
     build_pit_pipeline,
 )
+from tire_strategy.serving.explorer_data import RAW_LAPS_PATH
+
+MODERN_ERA: tuple[int, ...] = (2022, 2023, 2024, 2025)
+WET_COMPOUNDS: frozenset[str] = frozenset({"INTERMEDIATE", "WET"})
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +288,7 @@ def grouped_cv_metrics(
     pit = cross_validate_pit(
         df, n_splits=n_splits, params=params, features=features, cost_fn=cost_fn, cost_fp=cost_fp
     )["agg"]
-    comp = cross_validate_compound(df, n_splits=n_splits)
+    comp = cross_validate_compound(df, n_splits=n_splits, features=features)
     beats_both = pit["model_cost_mean"] < min(pit["majority_cost_mean"], pit["rule_cost_mean"])
     metrics = {
         "n_rows": float(len(df)),
@@ -434,8 +444,159 @@ def season_scope() -> list[Run]:
     return runs
 
 
+def cost_ratio() -> list[Run]:
+    """How sensitive is the model's win to the missed-pit:spurious-pit cost ratio?
+
+    The 5:1 default is a domain guess. This sweeps the ratio and records, at each,
+    the model vs both baselines on grouped CV — so the headline "model wins" is
+    shown to be robust to the exact cost number, not an artefact of one choice.
+    """
+    pool = _scope(_prepare(load_dataset()), MODERN_ERA)
+    sweep = cost_ratio_sweep(pool, ratios=(2.0, 3.0, 5.0, 8.0, 10.0))
+    note = (
+        "Model beats 'never pit' and the rule-based strategist across every "
+        "missed:spurious cost ratio from 2:1 to 10:1 (grouped CV, 2022-2025)."
+    )
+    runs: list[Run] = []
+    for row in sweep.to_dict("records"):
+        ratio = float(row["ratio"])
+        runs.append(
+            Run(
+                group="cost-ratio",
+                label=f"cost ratio {ratio:.0f}:1 (missed:spurious)",
+                params={"cost_fn": ratio, "cost_fp": 1.0, "n_splits": 5, "seed": SEED},
+                metrics={
+                    "model_cost": float(row["model_cost"]),
+                    "majority_cost": float(row["majority_cost"]),
+                    "rule_cost": float(row["rule_cost"]),
+                    "beats_majority": bool(row["beats_majority"]),
+                    "beats_rule": bool(row["beats_rule"]),
+                },
+                notes=note,
+            )
+        )
+    return runs
+
+
+@lru_cache(maxsize=1)
+def _team_lookup() -> pd.DataFrame:
+    """(year, round, driver) -> team, from the raw-laps parquet (1 team per race)."""
+    raw = pd.read_parquet(RAW_LAPS_PATH, columns=["year", "round", "Driver", "Team"])
+    teams = raw.drop_duplicates(subset=["year", "round", "Driver"])
+    return cast(pd.DataFrame, teams.rename(columns={"Driver": "driver", "Team": "team"}))
+
+
+def _with_team(df: pd.DataFrame) -> pd.DataFrame:
+    """Attach the constructor (`team`) to each driver-lap via a leak-free race join."""
+    merged = df.merge(_team_lookup(), on=["year", "round", "driver"], how="left")
+    merged["team"] = merged["team"].fillna("UNKNOWN").astype(str)
+    return merged
+
+
+def team_feature() -> list[Run]:
+    """Do teams follow learnable strategy patterns? Add `team` and ablate.
+
+    The constructor is a weak-but-plausible signal (some teams habitually undercut,
+    run longer first stints, etc.), but it is confounded with car pace and shifts
+    year to year. Rather than assume, we add `team` as a categorical to *both* heads
+    and compare on grouped CV (2022-2025). Keep it only if it consistently helps.
+    """
+    pool = _scope(_prepare(load_dataset()), MODERN_ERA)
+    teamed = _with_team(pool)
+    spec_team = FeatureSpec(categorical=("compound", "circuit", "team"))
+    note = (
+        "Adds the constructor as a categorical to both heads. Compare cv_model_cost "
+        "/ cv_ap_mean / cv_compound_accuracy_mean against the no-team baseline; adopt "
+        "only on a consistent win (the project's measure-it-or-reject rule)."
+    )
+    return [
+        Run(
+            group="team-feature",
+            label="baseline (no team)",
+            params={"features": list(DEFAULT_FEATURES.columns), "n_splits": 5, "seed": SEED},
+            metrics=grouped_cv_metrics(pool),
+            notes=note,
+        ),
+        Run(
+            group="team-feature",
+            label="+ team (constructor)",
+            params={"features": list(spec_team.columns), "n_splits": 5, "seed": SEED},
+            metrics=grouped_cv_metrics(teamed, features=spec_team),
+            notes=note,
+        ),
+    ]
+
+
+def wet_regime() -> list[Run]:
+    """Feasibility of a wet<->dry tyre-regime model (scoping, not a fitted model).
+
+    The slick compound head excludes INTERMEDIATE/WET. A wet model is a *separate*
+    build; before committing to it, quantify the opportunity honestly: how often
+    wet tyres are used, and how many slick<->wet crossovers there are to learn from.
+    No invented accuracy — just the data that decides whether it is worth building.
+    """
+    raw = pd.read_parquet(
+        RAW_LAPS_PATH, columns=["year", "round", "Driver", "Compound", "LapNumber"]
+    )
+    raw = cast(pd.DataFrame, raw[raw["year"].isin(list(MODERN_ERA))].copy())
+
+    def regime(compound: str) -> str:
+        if compound in WET_COMPOUNDS:
+            return "wet"
+        if compound in SLICK_COMPOUNDS:
+            return "slick"
+        return "other"
+
+    raw["regime"] = raw["Compound"].astype(str).map(regime)
+    n_races = int(raw.groupby(["year", "round"]).ngroups)
+    wet_laps = int((raw["regime"] == "wet").sum())
+    races_with_wet = int(
+        raw[raw["regime"] == "wet"].groupby(["year", "round"]).ngroups  # type: ignore[index]
+    )
+
+    slick_to_wet = wet_to_slick = 0
+    driver_races_with_wet = 0
+    for _, grp in raw.sort_values("LapNumber").groupby(["year", "round", "Driver"]):
+        regimes = [r for r in grp["regime"].tolist() if r in ("slick", "wet")]
+        if "wet" in regimes:
+            driver_races_with_wet += 1
+        for prev, curr in pairwise(regimes):
+            if prev == "slick" and curr == "wet":
+                slick_to_wet += 1
+            elif prev == "wet" and curr == "slick":
+                wet_to_slick += 1
+
+    note = (
+        "Scoping only. A wet-regime model is a separate build from the slick head; "
+        "these counts decide whether the (thin) data supports it. The slick<->wet "
+        "crossovers are the learnable transitions; rainfall is already a per-lap "
+        "feature, so onset is observable but track-drying timing is not."
+    )
+    return [
+        Run(
+            group="wet-regime",
+            label="2022-2025 wet-tyre usage & crossovers",
+            params={"years": list(MODERN_ERA), "wet_compounds": sorted(WET_COMPOUNDS)},
+            metrics={
+                "n_races": float(n_races),
+                "races_with_wet_tyres": float(races_with_wet),
+                "pct_races_with_wet": float(round(100 * races_with_wet / max(n_races, 1), 1)),
+                "wet_laps": float(wet_laps),
+                "pct_wet_laps": float(round(100 * wet_laps / max(len(raw), 1), 2)),
+                "driver_races_using_wet": float(driver_races_with_wet),
+                "slick_to_wet_crossovers": float(slick_to_wet),
+                "wet_to_slick_crossovers": float(wet_to_slick),
+            },
+            notes=note,
+        )
+    ]
+
+
 EXPERIMENTS = {
     "season-scope": season_scope,
+    "cost-ratio": cost_ratio,
+    "team-feature": team_feature,
+    "wet-regime": wet_regime,
 }
 
 

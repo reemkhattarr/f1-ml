@@ -133,7 +133,9 @@ def cost_ratio_sweep(
     return pd.DataFrame(rows)
 
 
-def cross_validate_compound(df: pd.DataFrame, n_splits: int = 5) -> dict:
+def cross_validate_compound(
+    df: pd.DataFrame, n_splits: int = 5, features: FeatureSpec = DEFAULT_FEATURES
+) -> dict:
     """GroupKFold evaluation of the compound head vs the most-frequent baseline.
 
     Reports accuracy and macro-F1 (the latter matters because HARD is ~53% of
@@ -149,7 +151,7 @@ def cross_validate_compound(df: pd.DataFrame, n_splits: int = 5) -> dict:
     macro_f1s: list[float] = []
     baseline_accs: list[float] = []
     for tr, te in GroupKFold(n_splits=n_splits).split(pits, y, groups):
-        model = build_compound_pipeline()
+        model = build_compound_pipeline(features=features)
         model.fit(pits.iloc[tr], y.iloc[tr])
         pred = model.predict(pits.iloc[te])
         y_te = y.iloc[te]
