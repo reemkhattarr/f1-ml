@@ -22,6 +22,9 @@ _PARQUETS = (
     "tire_strategy_dataset.parquet",
     "stint_laps.parquet",
     "telemetry_features.parquet",
+    "raw_laps.parquet",
+    "weather.parquet",
+    "results.parquet",
 )
 
 
