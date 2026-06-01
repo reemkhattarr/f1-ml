@@ -11,6 +11,9 @@ from pathlib import Path
 
 import fastf1
 
+# Global seed for reproducible splits, model training and any sampling.
+SEED: int = 42
+
 # Project root = .../01-tire-strategy (two parents up from this file's package).
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 DATA_DIR: Path = PROJECT_ROOT / "data"

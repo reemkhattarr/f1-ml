@@ -38,6 +38,7 @@ def _make(records: list[dict]) -> pd.DataFrame:
         "under_caution": False,
         "is_accurate": True,
         "deleted": False,
+        "rainfall": False,
         "lap_time_s": 90.0,
         "track_temp": 40.0,
         "air_temp": 25.0,
