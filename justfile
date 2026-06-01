@@ -46,6 +46,21 @@ data *SEASONS:
 stint-data:
     uv run python -m tire_strategy.simulator.data
 
+# Incrementally add new/missing races to the dataset (backfill or post-race).
+# e.g. `just update-data 2025 2026`. No args -> the default seasons.
+update-data *SEASONS:
+    uv run python -m tire_strategy.data.dataset --update {{SEASONS}}
+
+# Post-race refresh: add new races, retrain, rebuild the deployable demo bundle.
+refresh:
+    uv run python -m tire_strategy.data.dataset --update 2022 2023 2024 2025 2026
+    just train
+    just build-space
+
+# Push the rebuilt demo bundle live to Hugging Face Spaces.
+deploy-demo:
+    uv run hf upload reemkhattar/f1-tire-strategy 01-tire-strategy/deploy/space_build . --repo-type space
+
 # Tune the pit-head hyperparameters (Optuna) -> artifacts/best_params.json.
 tune *ARGS:
     uv run python -m tire_strategy.models.cv {{ARGS}}

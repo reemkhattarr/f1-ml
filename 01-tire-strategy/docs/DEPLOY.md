@@ -54,6 +54,32 @@ files live in `deploy/hf_space/`; the build script copies them.
 
 > Steps 2–3 need your Hugging Face account — happy to walk through them together.
 
+## Keeping the demo current (after each new race)
+
+The dataset updater is **incremental** — it adds only races not already present, so
+the same command backfills history *and* picks up a newly-finished race:
+
+```bash
+just update-data 2026          # add any new 2026 races (skips ones already built)
+```
+
+A full post-race refresh, then redeploy:
+
+```bash
+just refresh                   # update data -> retrain -> rebuild the Space bundle
+just deploy-demo               # push the bundle live to Hugging Face
+```
+
+**Automating it.** `just refresh && just deploy-demo` is the whole pipeline. To run
+it automatically after race weekends, schedule it as a **local** job (e.g. a weekly
+cron entry on the machine that holds the FastF1 cache and the `hf` login token) —
+those credentials live locally, so a local scheduler is the simplest reliable
+option. (A cloud scheduler would need the FastF1 cache and an `HF_TOKEN` secret
+provisioned.) Note that **2026 is a new regulation era**, so 2026 races appear in
+the demo for browsing but the model — trained on the 2022–2025 ground-effect era —
+makes out-of-distribution predictions on them until enough 2026 data accumulates to
+retrain on.
+
 ## FastAPI service → Render / Railway (free tier)
 
 The service is stateless (race state is passed in each request, nothing stored).
