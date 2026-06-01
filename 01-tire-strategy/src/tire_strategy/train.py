@@ -24,7 +24,7 @@ import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.frozen import FrozenEstimator
 
-from tire_strategy.config import ARTIFACTS_DIR, MLFLOW_DIR, SEED
+from tire_strategy.config import ARTIFACTS_DIR, MLFLOW_DIR, SEED, TUNED_PARAMS_PATH
 from tire_strategy.data import SLICK_COMPOUNDS, load_dataset
 from tire_strategy.data.labels import add_pit_window_label
 from tire_strategy.evaluate import pit_metrics, plot_confusion, plot_reliability
@@ -34,6 +34,7 @@ from tire_strategy.models import (
     assign_temporal_split,
     build_compound_pipeline,
     build_pit_pipeline,
+    cross_validate_pit,
 )
 from tire_strategy.models.metrics import asymmetric_pit_cost, best_cost_threshold
 
@@ -61,6 +62,11 @@ def _slick_pits(frame: pd.DataFrame) -> pd.DataFrame:
     """Rows that are strategic pit stops onto a slick compound (compound head data)."""
     mask = (frame["label_pit"] == 1) & frame["label_compound"].isin(SLICK_COMPOUNDS)
     return cast(pd.DataFrame, frame[mask].copy())
+
+
+def _load_tuned_params() -> dict:
+    """Load Optuna-tuned pit-head params if present (see `just tune`), else {}."""
+    return json.loads(TUNED_PARAMS_PATH.read_text()) if TUNED_PARAMS_PATH.exists() else {}
 
 
 def train() -> dict:
@@ -100,9 +106,18 @@ def train() -> dict:
             }
         )
 
-        # --- Pit head: fit on train, calibrate on val ---
+        tuned = _load_tuned_params()
+        mlflow.log_params({f"tuned_{k}": v for k, v in tuned.items()})
+
+        # --- Trustworthy estimate: grouped CV across all races (vs baselines) ---
+        cv_df = pd.concat([train_df, val_df, test_df])
+        logger.info("Grouped CV across all races ...")
+        cv = cross_validate_pit(cv_df, n_splits=5, params=tuned)
+        mlflow.log_metrics({f"cv_{k}": v for k, v in cv["agg"].items()})
+
+        # --- Pit head: fit on train, calibrate on val (deployment-style holdout) ---
         logger.info("Fitting pit head (scale_pos_weight=%.2f) ...", scale_pos_weight)
-        pit_pipeline = build_pit_pipeline(scale_pos_weight=scale_pos_weight)
+        pit_pipeline = build_pit_pipeline(scale_pos_weight=scale_pos_weight, **tuned)
         pit_pipeline.fit(train_df, y_train)
 
         # FrozenEstimator marks the fitted pipeline as prefit, so calibration runs
@@ -137,6 +152,7 @@ def train() -> dict:
         # --- Log metrics ---
         metrics = {
             **{f"pit_{k}": v for k, v in pit_test.items()},
+            **{f"cv_{k}": v for k, v in cv["agg"].items()},
             **baseline_costs,
             "compound_accuracy": compound_acc,
             "compound_n_test": float(len(comp_test)),
@@ -180,16 +196,23 @@ def _log_summary(metrics: dict, threshold: float) -> None:
     ap = metrics["pit_average_precision"]
     auc = metrics["pit_roc_auc"]
     n_comp = int(metrics["compound_n_test"])
-    print("\n=== Tire-strategy model — held-out test results ===")
-    print(f"Pit head    AP={ap:.3f}  ROC-AUC={auc:.3f}")
+    print("\n=== Tire-strategy model results ===")
+    print("Grouped CV across all races (trustworthy estimate, lower cost is better):")
+    print(
+        f"            model={metrics['cv_model_cost_mean']:.4f}"
+        f"+/-{metrics['cv_model_cost_std']:.4f}"
+        f"   majority={metrics['cv_majority_cost_mean']:.4f}"
+        f"   rule={metrics['cv_rule_cost_mean']:.4f}   AP={metrics['cv_ap_mean']:.3f}"
+    )
+    beats = metrics["cv_model_cost_mean"] < min(
+        metrics["cv_majority_cost_mean"], metrics["cv_rule_cost_mean"]
+    )
+    print(f"            -> beats both baselines: {beats}")
+    print(f"Temporal holdout (late-2024): pit AP={ap:.3f}  ROC-AUC={auc:.3f}")
     print(
         f"            recall={metrics['pit_recall']:.3f}"
         f"  precision={metrics['pit_precision']:.3f}  (threshold={threshold:.3f})"
     )
-    print("Asymmetric cost (lower is better):")
-    print(f"            model       = {metrics['pit_asymmetric_cost']:.4f}")
-    print(f"            rule-based  = {metrics['baseline_rule_cost']:.4f}")
-    print(f"            majority    = {metrics['baseline_majority_cost']:.4f}")
     print(f"Compound head accuracy = {metrics['compound_accuracy']:.3f}  (n={n_comp})")
 
 

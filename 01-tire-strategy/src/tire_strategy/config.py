@@ -23,6 +23,11 @@ CACHE_DIR: Path = DATA_DIR / "cache"
 ARTIFACTS_DIR: Path = PROJECT_ROOT / "artifacts"
 MLFLOW_DIR: Path = PROJECT_ROOT / "mlflow"
 
+# Tracked configs (small, version-controlled): tuned hyperparameters live here so
+# the tuned model is reproducible from a fresh clone without re-running Optuna.
+CONFIGS_DIR: Path = PROJECT_ROOT / "configs"
+TUNED_PARAMS_PATH: Path = CONFIGS_DIR / "best_params.json"
+
 
 def enable_cache(cache_dir: Path = CACHE_DIR) -> Path:
     """Enable the FastF1 on-disk cache, creating the directory if needed.

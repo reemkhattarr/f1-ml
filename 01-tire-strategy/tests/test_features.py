@@ -120,12 +120,26 @@ def test_pace_and_degradation_use_only_past_laps() -> None:
         ]
     )
     out = build_features(df).sort_values("lap_number").reset_index(drop=True)
+    from tire_strategy.data.features import FUEL_S_PER_LAP
+
     # Last clean lap time on lap 4 is lap 3's 92s, never the current 200s.
     assert out.loc[3, "last_clean_lap_time_s"] == pytest.approx(92.0)
-    # Degradation slope on lap 4 is fitted on laps 1-3 (+1.0 s/lap), ignoring 200.
-    assert out.loc[3, "deg_slope_s_per_lap"] == pytest.approx(1.0, abs=1e-6)
+    # Slope on lap 4 is fitted on laps 1-3 (raw +1.0 s/lap), ignoring the 200s
+    # outlier; fuel correction adds FUEL_S_PER_LAP (laps_remaining falls by 1/lap).
+    assert out.loc[3, "deg_slope_s_per_lap"] == pytest.approx(1.0 + FUEL_S_PER_LAP, abs=1e-6)
     # Not enough history on lap 1 -> undefined.
     assert pd.isna(out.loc[0, "deg_slope_s_per_lap"])
+
+
+def test_degradation_slope_is_fuel_corrected() -> None:
+    from tire_strategy.data.features import FUEL_S_PER_LAP
+
+    # Six clean laps with *constant* raw lap time. Naive slope would be 0, but the
+    # car is lightening, so the tyre must be degrading to keep lap time flat: the
+    # fuel correction recovers that as a positive slope ~ FUEL_S_PER_LAP.
+    df = _make([{"driver": "A", "lap_number": i} for i in range(1, 7)])
+    out = build_features(df).sort_values("lap_number").reset_index(drop=True)
+    assert out.loc[5, "deg_slope_s_per_lap"] == pytest.approx(FUEL_S_PER_LAP, abs=1e-6)
 
 
 @pytest.mark.integration

@@ -84,3 +84,19 @@ def test_compound_pipeline_fits_three_classes() -> None:
     model.fit(X, y)
     preds = model.predict(X)
     assert set(preds).issubset(set(SLICK_COMPOUNDS))
+
+
+def test_cross_validate_pit_runs_and_reports_baselines() -> None:
+    from tire_strategy.models import cross_validate_pit
+
+    rng = np.random.default_rng(1)
+    X = _feature_frame(180)
+    X["year"] = 2024
+    X["round"] = rng.integers(1, 7, len(X))  # 6 race-weekend groups
+    X["label_pit_window"] = (X["tyre_age"] > 20).astype(int)
+
+    result = cross_validate_pit(X, n_splits=3, params={"n_estimators": 40})
+    assert len(result["folds"]) == 3
+    assert {"ap_mean", "model_cost_mean", "majority_cost_mean", "rule_cost_mean"} <= set(
+        result["agg"]
+    )

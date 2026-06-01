@@ -42,6 +42,10 @@ check: lint types test
 data *SEASONS:
     uv run python -m tire_strategy.data.dataset {{SEASONS}}
 
+# Tune the pit-head hyperparameters (Optuna) -> artifacts/best_params.json.
+tune *ARGS:
+    uv run python -m tire_strategy.models.cv {{ARGS}}
+
 # Train + evaluate both model heads, logging to local MLflow.
 train:
     uv run python -m tire_strategy.train
