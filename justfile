@@ -75,6 +75,17 @@ build-explorer-space:
 deploy-explorer:
     uv run hf upload reemkhattar/f1-data-explorer 01-tire-strategy/deploy/explorer_space_build . --repo-type space
 
+# Rebuild the explorer datasets (all sessions, all seasons) + explorer bundle.
+refresh-explorer:
+    uv run python -m tire_strategy.serving.explorer_data
+    just build-explorer-space
+
+# Full post-weekend refresh: model demo + explorer bundles (build only, no deploy).
+refresh-all: refresh refresh-explorer
+
+# Deploy both Spaces live (run after `just refresh-all`). See docs/DATA_UPDATES.md.
+deploy-all: deploy-demo deploy-explorer
+
 # Tune the pit-head hyperparameters (Optuna) -> artifacts/best_params.json.
 tune *ARGS:
     uv run python -m tire_strategy.models.cv {{ARGS}}
