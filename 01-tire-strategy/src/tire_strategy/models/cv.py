@@ -13,17 +13,25 @@ from typing import cast
 import numpy as np
 import optuna
 import pandas as pd
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, f1_score
 from sklearn.model_selection import GroupKFold
 
 from tire_strategy.config import SEED
+from tire_strategy.data.features import SLICK_COMPOUNDS
 from tire_strategy.models.baselines import MajorityBaseline, RuleBasedBaseline
 from tire_strategy.models.metrics import (
+    DEFAULT_COST_FN,
+    DEFAULT_COST_FP,
     asymmetric_pit_cost,
     best_cost_threshold,
     expected_pit_cost,
 )
-from tire_strategy.models.pipeline import DEFAULT_FEATURES, FeatureSpec, build_pit_pipeline
+from tire_strategy.models.pipeline import (
+    DEFAULT_FEATURES,
+    FeatureSpec,
+    build_compound_pipeline,
+    build_pit_pipeline,
+)
 from tire_strategy.models.split import race_group_key
 
 _TARGET = "label_pit_window"
@@ -39,11 +47,14 @@ def cross_validate_pit(
     n_splits: int = 5,
     params: dict | None = None,
     features: FeatureSpec = DEFAULT_FEATURES,
+    cost_fn: float = DEFAULT_COST_FN,
+    cost_fp: float = DEFAULT_COST_FP,
 ) -> dict:
     """GroupKFold (by race weekend) evaluation of the pit head vs the baselines.
 
     The decision threshold is tuned on each fold's *training* portion and applied
     to its held-out portion, so no test information leaks into the threshold.
+    ``cost_fn``/``cost_fp`` set the asymmetric cost (see :func:`cost_ratio_sweep`).
     """
     groups = race_group_key(df).to_numpy()
     y = df[target].astype(int).to_numpy()
@@ -58,16 +69,22 @@ def cross_validate_pit(
         )
         model.fit(x_tr, y_tr)
 
-        thr, _ = best_cost_threshold(y_tr, model.predict_proba(x_tr)[:, 1])
+        thr, _ = best_cost_threshold(
+            y_tr, model.predict_proba(x_tr)[:, 1], cost_fn=cost_fn, cost_fp=cost_fp
+        )
         proba_te = model.predict_proba(x_te)[:, 1]
         y_pred = (proba_te >= thr).astype(int)
         rows.append(
             {
                 "fold": fold,
                 "ap": float(average_precision_score(y_te, proba_te)),
-                "model_cost": asymmetric_pit_cost(y_te, y_pred),
-                "majority_cost": asymmetric_pit_cost(y_te, MajorityBaseline().predict(x_te)),
-                "rule_cost": asymmetric_pit_cost(y_te, RuleBasedBaseline().predict(x_te)),
+                "model_cost": asymmetric_pit_cost(y_te, y_pred, cost_fn, cost_fp),
+                "majority_cost": asymmetric_pit_cost(
+                    y_te, MajorityBaseline().predict(x_te), cost_fn, cost_fp
+                ),
+                "rule_cost": asymmetric_pit_cost(
+                    y_te, RuleBasedBaseline().predict(x_te), cost_fn, cost_fp
+                ),
                 "threshold": thr,
             }
         )
@@ -80,6 +97,71 @@ def cross_validate_pit(
     agg["ap_std"] = float(folds["ap"].std())
     agg["model_cost_std"] = float(folds["model_cost"].std())
     return {"folds": folds, "agg": agg}
+
+
+def cost_ratio_sweep(
+    df: pd.DataFrame,
+    ratios: tuple[float, ...] = (2.0, 3.0, 5.0, 8.0, 10.0),
+    n_splits: int = 5,
+    params: dict | None = None,
+    features: FeatureSpec = DEFAULT_FEATURES,
+) -> pd.DataFrame:
+    """Robustness of the model's win to the missed-pit:spurious-pit cost ratio.
+
+    The 5:1 default is a domain guess: a spurious stop costs the pit-lane time
+    (~20-25 s), while a missed pit costs the time lost on dead tyres (often more).
+    Rather than defend one number, we show the model beats "never pit" across a
+    sensible range of ratios (cost_fp fixed at 1, cost_fn = ratio).
+    """
+    rows: list[dict] = []
+    for ratio in ratios:
+        agg = cross_validate_pit(
+            df, n_splits=n_splits, params=params, features=features, cost_fn=ratio, cost_fp=1.0
+        )["agg"]
+        rows.append(
+            {
+                "ratio": ratio,
+                "model_cost": agg["model_cost_mean"],
+                "majority_cost": agg["majority_cost_mean"],
+                "rule_cost": agg["rule_cost_mean"],
+                "beats_majority": agg["model_cost_mean"] < agg["majority_cost_mean"],
+                "beats_rule": agg["model_cost_mean"] < agg["rule_cost_mean"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def cross_validate_compound(df: pd.DataFrame, n_splits: int = 5) -> dict:
+    """GroupKFold evaluation of the compound head vs the most-frequent baseline.
+
+    Reports accuracy and macro-F1 (the latter matters because HARD is ~53% of
+    pits, so accuracy alone hides the minority SOFT/MEDIUM classes).
+    """
+    pits = cast(
+        pd.DataFrame, df[(df["label_pit"] == 1) & df["label_compound"].isin(SLICK_COMPOUNDS)].copy()
+    )
+    y = cast(pd.Series, pits["label_compound"].astype(str))
+    groups = race_group_key(pits).to_numpy()
+
+    accs: list[float] = []
+    macro_f1s: list[float] = []
+    baseline_accs: list[float] = []
+    for tr, te in GroupKFold(n_splits=n_splits).split(pits, y, groups):
+        model = build_compound_pipeline()
+        model.fit(pits.iloc[tr], y.iloc[tr])
+        pred = model.predict(pits.iloc[te])
+        y_te = y.iloc[te]
+        accs.append(float((pred == y_te).mean()))
+        macro_f1s.append(float(f1_score(y_te, pred, average="macro", labels=list(SLICK_COMPOUNDS))))
+        most_frequent = str(y.iloc[tr].mode().iloc[0])
+        baseline_accs.append(float((y_te == most_frequent).mean()))
+
+    return {
+        "accuracy_mean": float(np.mean(accs)),
+        "macro_f1_mean": float(np.mean(macro_f1s)),
+        "baseline_accuracy_mean": float(np.mean(baseline_accs)),
+        "n_pits": float(len(pits)),
+    }
 
 
 def tune_pit(
