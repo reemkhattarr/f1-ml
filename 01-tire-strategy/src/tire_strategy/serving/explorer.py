@@ -50,6 +50,7 @@ class Section:
     year_col: str | None = "year"
     circuit_col: str | None = "circuit"
     driver_col: str | None = "driver"
+    session_col: str | None = "session"
 
 
 SECTIONS: list[Section] = [
@@ -60,6 +61,7 @@ SECTIONS: list[Section] = [
         (
             "year",
             "circuit",
+            "session",
             "Driver",
             "Team",
             "LapNumber",
@@ -86,9 +88,10 @@ SECTIONS: list[Section] = [
     ),
     Section(
         "Strategy & model data",
-        "The engineered model inputs + the pit/compound labels, per driver-lap.",
+        "The engineered model inputs + the pit/compound labels, per driver-lap (race only).",
         DATASET_PATH,
         None,
+        session_col=None,
     ),
     Section(
         "Weather",
@@ -97,6 +100,7 @@ SECTIONS: list[Section] = [
         (
             "year",
             "circuit",
+            "session",
             "Time",
             "AirTemp",
             "TrackTemp",
@@ -115,6 +119,7 @@ SECTIONS: list[Section] = [
         (
             "year",
             "circuit",
+            "session",
             "Abbreviation",
             "TeamName",
             "Position",
@@ -131,16 +136,19 @@ SECTIONS: list[Section] = [
     ),
     Section(
         "Telemetry (aggression)",
-        "Per-lap driving-aggression / tyre-load aggregates from the car-data trace.",
+        "Per-lap driving-aggression / tyre-load aggregates from the race car-data "
+        "trace (2024 sample).",
         TELEMETRY_PATH,
         None,
         circuit_col=None,
+        session_col=None,
     ),
     Section(
         "Clean stint laps",
-        "Clean slick laps with lap times — the basis for the degradation model.",
+        "Clean slick race laps with lap times — the basis for the degradation model.",
         STINT_PATH,
         None,
+        session_col=None,
     ),
 ]
 
@@ -159,7 +167,7 @@ def _options(section: Section, column: str | None) -> list[str]:
     return [str(v) for v in sorted(df[column].dropna().unique().tolist())]
 
 
-def view(section: Section, year: str, circuit: str, driver: str, max_rows: int):
+def view(section: Section, year: str, circuit: str, session: str, driver: str, max_rows: int):
     """Filtered, display-friendly view of one section plus a row/column summary.
 
     Filtering happens on the *full* frame first; the display-column subset is
@@ -168,12 +176,15 @@ def view(section: Section, year: str, circuit: str, driver: str, max_rows: int):
     """
     df = _load(str(section.path)).copy()
 
-    if section.year_col and year not in (None, _ALL) and section.year_col in df.columns:
-        df = cast(pd.DataFrame, df[df[section.year_col].astype(str) == str(year)])
-    if section.circuit_col and circuit not in (None, _ALL) and section.circuit_col in df.columns:
-        df = cast(pd.DataFrame, df[df[section.circuit_col].astype(str) == str(circuit)])
-    if section.driver_col and driver not in (None, _ALL) and section.driver_col in df.columns:
-        df = cast(pd.DataFrame, df[df[section.driver_col].astype(str) == str(driver)])
+    def _eq(col: str | None, value: str) -> None:
+        nonlocal df
+        if col and value not in (None, _ALL) and col in df.columns:
+            df = cast(pd.DataFrame, df[df[col].astype(str) == str(value)])
+
+    _eq(section.year_col, year)
+    _eq(section.circuit_col, circuit)
+    _eq(section.session_col, session)
+    _eq(section.driver_col, driver)
 
     if section.columns:
         df = cast(pd.DataFrame, df[[c for c in section.columns if c in df.columns]])
@@ -206,6 +217,9 @@ def build_explorer():  # pragma: no cover - UI wiring
                     circuit = gr.Dropdown(
                         [_ALL, *_options(section, section.circuit_col)], value=_ALL, label="Circuit"
                     )
+                    session = gr.Dropdown(
+                        [_ALL, *_options(section, section.session_col)], value=_ALL, label="Session"
+                    )
                     driver = gr.Dropdown(
                         [_ALL, *_options(section, section.driver_col)], value=_ALL, label="Driver"
                     )
@@ -213,13 +227,13 @@ def build_explorer():  # pragma: no cover - UI wiring
                 info = gr.Markdown()
                 table = gr.Dataframe(interactive=False, wrap=False, max_height=560)
 
-                def _update(y, c, d, m, _section=section):
-                    return view(_section, y, c, d, m)
+                def _update(y, c, s, d, m, _section=section):
+                    return view(_section, y, c, s, d, m)
 
-                init = view(section, _ALL, _ALL, _ALL, 200)
+                init = view(section, _ALL, _ALL, _ALL, _ALL, 200)
                 table.value, info.value = init[0], init[1]
-                for ctrl in (year, circuit, driver, max_rows):
-                    ctrl.change(_update, [year, circuit, driver, max_rows], [table, info])
+                for ctrl in (year, circuit, session, driver, max_rows):
+                    ctrl.change(_update, [year, circuit, session, driver, max_rows], [table, info])
 
     return demo
 

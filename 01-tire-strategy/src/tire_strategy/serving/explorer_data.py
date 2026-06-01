@@ -1,27 +1,54 @@
 """Build rich "browse everything" datasets for the data explorer.
 
-From the already-cached race sessions, extract the full FastF1 data we otherwise
-drop: complete per-lap timing (lap + sector times, speed-trap speeds, positions,
-pit timestamps), full weather, and session results. Timedeltas are converted to
-seconds and leftover objects to strings so everything is parquet/display friendly.
+Walks the FastF1 event schedule for every season and extracts the full data for
+**every session** of each weekend — free practice, qualifying, sprint and race —
+not just the race. For each session we keep complete per-lap timing (lap + sector
+times, speed-trap speeds, positions, pit timestamps, deleted-lap flags), full
+weather, and the session results (so e.g. Qualifying rows carry Q1/Q2/Q3).
+
+Each row is tagged with `year`, `round`, `circuit` and `session` so the explorer
+can filter by any of them. Timedeltas become seconds and leftover objects become
+strings so everything is parquet/display friendly.
+
+The build is **resumable**: FastF1's on-disk cache persists every download, so an
+interrupted run continues cheaply (cached sessions re-read instantly). Each session
+is loaded defensively — a missing/unavailable session is skipped, never fatal.
+
+    uv run python -m tire_strategy.serving.explorer_data            # all seasons
+    uv run python -m tire_strategy.serving.explorer_data 2025 2026  # only these
 """
 
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 import fastf1
 import pandas as pd
 
 from tire_strategy.config import DATA_DIR, enable_cache
-from tire_strategy.data.dataset import load_dataset
 
 logger = logging.getLogger(__name__)
 
 RAW_LAPS_PATH: Path = DATA_DIR / "processed" / "raw_laps.parquet"
 WEATHER_PATH: Path = DATA_DIR / "processed" / "weather.parquet"
 RESULTS_PATH: Path = DATA_DIR / "processed" / "results.parquet"
+
+# Seasons FastF1 covers well. 2026 is partial (only completed rounds load).
+DEFAULT_SEASONS: tuple[int, ...] = (2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026)
+
+# Map FastF1's full session names to short, stable codes for the `session` column.
+_SESSION_CODE: dict[str, str] = {
+    "Practice 1": "FP1",
+    "Practice 2": "FP2",
+    "Practice 3": "FP3",
+    "Qualifying": "Q",
+    "Sprint Qualifying": "SQ",
+    "Sprint Shootout": "SS",
+    "Sprint": "Sprint",
+    "Race": "R",
+}
 
 
 def _display_safe(df: pd.DataFrame) -> pd.DataFrame:
@@ -38,45 +65,101 @@ def _display_safe(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _event_sessions(event: pd.Series) -> list[str]:
+    """The session names actually scheduled for one event (Session1..Session5)."""
+    names = []
+    for i in range(1, 6):
+        val = event.get(f"Session{i}")
+        if isinstance(val, str) and val and val.lower() != "none":
+            names.append(val)
+    return names
+
+
+def _extract_session(year: int, rnd: int, session_name: str) -> dict[str, pd.DataFrame] | None:
+    """Load one session and return display-safe laps/weather/results, or None."""
+    session = fastf1.get_session(year, rnd, session_name)
+    session.load(laps=True, weather=True, telemetry=False, messages=True)
+    if session.laps is None or len(session.laps) == 0:
+        return None
+    meta = {
+        "year": year,
+        "round": rnd,
+        "circuit": str(session.event["Location"]),
+        "session": _SESSION_CODE.get(session_name, session_name),
+    }
+    out: dict[str, pd.DataFrame] = {"laps": _display_safe(session.laps).assign(**meta)}
+    if session.weather_data is not None and len(session.weather_data):
+        out["weather"] = _display_safe(session.weather_data).assign(**meta)
+    if session.results is not None and len(session.results):
+        out["results"] = _display_safe(session.results).assign(**meta)
+    return out
+
+
+def _write(frames: list[pd.DataFrame], path: Path) -> None:
+    if not frames:
+        return
+    combined = pd.concat(frames, ignore_index=True)
+    for col in combined.columns:  # coerce leftover objects so pyarrow never chokes
+        if combined[col].dtype == "object":
+            combined[col] = combined[col].astype(str)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_parquet(path, index=False)
+    logger.info("Wrote %s (%d rows)", path.name, len(combined))
+
+
 def build_explorer_data(
+    seasons: tuple[int, ...] = DEFAULT_SEASONS,
     raw_path: Path = RAW_LAPS_PATH,
     weather_path: Path = WEATHER_PATH,
     results_path: Path = RESULTS_PATH,
 ) -> None:
-    """Assemble raw laps / weather / results parquets from all cached races."""
+    """Assemble laps / weather / results parquets across all sessions and seasons."""
     enable_cache()
-    races = load_dataset()[["year", "round"]].drop_duplicates()
     laps_all: list[pd.DataFrame] = []
     weather_all: list[pd.DataFrame] = []
     results_all: list[pd.DataFrame] = []
+    n_sessions = 0
 
-    for year, rnd in races.itertuples(index=False):
+    for year in seasons:
         try:
-            session = fastf1.get_session(int(year), int(rnd), "R")
-            session.load(laps=True, weather=True, telemetry=False, messages=False)
-            meta = {"year": int(year), "round": int(rnd), "circuit": str(session.event["Location"])}
-            laps_all.append(_display_safe(session.laps).assign(**meta))
-            weather_all.append(_display_safe(session.weather_data).assign(**meta))
-            results_all.append(_display_safe(session.results).assign(**meta))
-            logger.info("done %s round %s", year, rnd)
-        except Exception as exc:
-            logger.warning("skip %s round %s: %s", year, rnd, exc)
+            schedule = fastf1.get_event_schedule(year, include_testing=False)
+        except Exception as exc:  # pragma: no cover - network/availability
+            logger.warning("skip season %s schedule: %s", year, exc)
+            continue
 
-    raw_path.parent.mkdir(parents=True, exist_ok=True)
-    for frames, path in (
-        (laps_all, raw_path),
-        (weather_all, weather_path),
-        (results_all, results_path),
-    ):
-        combined = pd.concat(frames, ignore_index=True)
-        for col in combined.columns:  # coerce leftover objects so pyarrow never chokes
-            if combined[col].dtype == "object":
-                combined[col] = combined[col].astype(str)
-        combined.to_parquet(path, index=False)
-        logger.info("Wrote %s (%d rows)", path.name, len(combined))
+        for event in schedule.to_dict("records"):
+            rnd = int(event.get("RoundNumber", 0) or 0)
+            if rnd <= 0:
+                continue
+            for session_name in _event_sessions(pd.Series(event)):
+                try:
+                    extracted = _extract_session(year, rnd, session_name)
+                except Exception as exc:
+                    # Future/cancelled/unavailable sessions are expected; debug only.
+                    logger.debug("skip %s R%s %s: %s", year, rnd, session_name, exc)
+                    continue
+                if extracted is None:
+                    continue
+                laps_all.append(extracted["laps"])
+                if "weather" in extracted:
+                    weather_all.append(extracted["weather"])
+                if "results" in extracted:
+                    results_all.append(extracted["results"])
+                n_sessions += 1
+                logger.info("done %s R%s %s", year, rnd, session_name)
+
+    logger.info("Extracted %d sessions across %s", n_sessions, list(seasons))
+    _write(laps_all, raw_path)
+    _write(weather_all, weather_path)
+    _write(results_all, results_path)
+
+
+def _parse_seasons(argv: list[str]) -> tuple[int, ...]:
+    years = tuple(int(a) for a in argv if a.isdigit())
+    return years or DEFAULT_SEASONS
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    build_explorer_data()
+    build_explorer_data(seasons=_parse_seasons(sys.argv[1:]))
     print(f"Built: {RAW_LAPS_PATH.name}, {WEATHER_PATH.name}, {RESULTS_PATH.name}")
