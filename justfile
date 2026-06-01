@@ -36,4 +36,8 @@ test:
 check: lint types test
 
 # --- Project 1: Tire Strategy -------------------------------------------------
-# (data/train/serve recipes are added as the project's pipeline is built)
+
+# Build the full modelling dataset. Heavy on first run (many FastF1 loads),
+# fast thereafter (cached). Optionally pass seasons, e.g. `just data 2024`.
+data *SEASONS:
+    uv run python -m tire_strategy.data.dataset {{SEASONS}}

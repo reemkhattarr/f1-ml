@@ -2412,6 +2412,7 @@ dependencies = [
     { name = "mlflow" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pyarrow" },
     { name = "scikit-learn" },
 ]
 
@@ -2423,6 +2424,7 @@ requires-dist = [
     { name = "mlflow", specifier = ">=2.19.0" },
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "pandas", specifier = ">=2.2.0" },
+    { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "scikit-learn", specifier = ">=1.5.0" },
 ]
 
