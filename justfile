@@ -83,6 +83,11 @@ tune *ARGS:
 train:
     uv run python -m tire_strategy.train
 
+# Run a named experiment and append results to experiments/RESULTS.md.
+# e.g. `just experiment season-scope`
+experiment NAME:
+    uv run python -m tire_strategy.experiments {{NAME}}
+
 # Launch the local MLflow UI to browse experiments.
 mlflow-ui:
     uv run mlflow ui --backend-store-uri file:01-tire-strategy/mlflow
