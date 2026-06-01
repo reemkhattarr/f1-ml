@@ -61,7 +61,7 @@ def race_notes(year: int, circuit: str) -> str:
     by_lap = table.groupby("lap_number")
     sc_laps = int(by_lap["under_caution"].apply(lambda s: bool(s.fillna(False).any())).sum())
     red = bool(table["flag_red"].fillna(False).any()) if "flag_red" in table else False
-    wet = bool(table["rainfall"].fillna(False).any()) if "rainfall" in table else False
+    wet_by_lap = by_lap["rainfall"].apply(lambda s: bool(s.fillna(False).any()))
 
     notes = [f"**{circuit} {year}** — {total_laps} laps."]
     notes.append(
@@ -71,7 +71,19 @@ def race_notes(year: int, circuit: str) -> str:
     )
     if red:
         notes.append("🔴 Race was red-flagged (free tyre change).")
-    notes.append("🌧️ Wet or mixed conditions." if wet else "☀️ Dry running.")
+    # Surface mid-race condition changes — a major strategy driver.
+    if not wet_by_lap.any():
+        notes.append("☀️ Dry throughout.")
+    elif wet_by_lap.all():
+        notes.append("🌧️ Wet throughout.")
+    elif not bool(wet_by_lap.iloc[0]):
+        notes.append(
+            f"🌧️ Rain arrived mid-race (~lap {int(wet_by_lap[wet_by_lap].index.min())}) — a big strategy swing."
+        )
+    else:
+        notes.append(
+            f"🌦️ Mixed conditions — track dried during the race (wet for ~{int(wet_by_lap.sum())} laps)."
+        )
 
     res = _results()
     if res is not None:
