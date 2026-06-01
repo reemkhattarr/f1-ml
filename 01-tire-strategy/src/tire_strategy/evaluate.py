@@ -80,6 +80,30 @@ def plot_reliability(
     plt.close(fig)
 
 
+def plot_feature_importance(pit_pipeline, path: Path, top_n: int = 15) -> list[tuple[str, float]]:
+    """Plot the pit head's top gain-based feature importances (a trust audit).
+
+    Returns the ranked (name, gain) pairs so callers can log/inspect them.
+    """
+    pre = pit_pipeline.named_steps["pre"]
+    clf = pit_pipeline.named_steps["clf"]
+    names = list(pre.get_feature_names_out())
+    gains = clf.booster_.feature_importance(importance_type="gain")
+    ranked = sorted(zip(names, gains, strict=True), key=lambda kv: kv[1], reverse=True)[:top_n]
+
+    labels = [n for n, _ in ranked][::-1]
+    values = [float(g) for _, g in ranked][::-1]
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.barh(range(len(labels)), values, color="tab:blue")
+    ax.set_yticks(range(len(labels)), labels=labels)
+    ax.set_xlabel("Gain importance")
+    ax.set_title("Pit head — top feature importances")
+    fig.tight_layout()
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+    return [(n, float(g)) for n, g in ranked]
+
+
 def plot_confusion(
     y_true: npt.ArrayLike,
     y_pred: npt.ArrayLike,

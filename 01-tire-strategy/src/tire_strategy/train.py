@@ -27,7 +27,12 @@ from sklearn.frozen import FrozenEstimator
 from tire_strategy.config import ARTIFACTS_DIR, MLFLOW_DIR, SEED, TUNED_PARAMS_PATH
 from tire_strategy.data import SLICK_COMPOUNDS, load_dataset
 from tire_strategy.data.labels import add_pit_window_label
-from tire_strategy.evaluate import pit_metrics, plot_confusion, plot_reliability
+from tire_strategy.evaluate import (
+    pit_metrics,
+    plot_confusion,
+    plot_feature_importance,
+    plot_reliability,
+)
 from tire_strategy.models import (
     MajorityBaseline,
     RuleBasedBaseline,
@@ -36,6 +41,7 @@ from tire_strategy.models import (
     build_pit_pipeline,
     cross_validate_pit,
 )
+from tire_strategy.models.baselines import MostFrequentCompound
 from tire_strategy.models.metrics import asymmetric_pit_cost, best_cost_threshold
 
 logger = logging.getLogger(__name__)
@@ -144,10 +150,15 @@ def train() -> dict:
         comp_train = _slick_pits(train_df)
         comp_test = _slick_pits(test_df)
         logger.info("Fitting compound head (%d train pits) ...", len(comp_train))
+        comp_y_train = cast(pd.Series, comp_train["label_compound"].astype(str))
+        comp_y_test = cast(pd.Series, comp_test["label_compound"].astype(str))
         compound_pipeline = build_compound_pipeline()
-        compound_pipeline.fit(comp_train, comp_train["label_compound"].astype(str))
+        compound_pipeline.fit(comp_train, comp_y_train)
         comp_pred = compound_pipeline.predict(comp_test)
-        compound_acc = float((comp_pred == comp_test["label_compound"].astype(str)).mean())
+        compound_acc = float((comp_pred == comp_y_test).mean())
+        # Baseline: always guess the most frequent training compound.
+        comp_base = MostFrequentCompound().fit(comp_y_train)
+        compound_base_acc = float((comp_base.predict(comp_test) == comp_y_test).mean())
 
         # --- Log metrics ---
         metrics = {
@@ -155,6 +166,7 @@ def train() -> dict:
             **{f"cv_{k}": v for k, v in cv["agg"].items()},
             **baseline_costs,
             "compound_accuracy": compound_acc,
+            "compound_baseline_accuracy": compound_base_acc,
             "compound_n_test": float(len(comp_test)),
         }
         mlflow.log_metrics(metrics)
@@ -164,16 +176,15 @@ def train() -> dict:
         rel_path = ARTIFACTS_DIR / "pit_calibration.png"
         pit_cm_path = ARTIFACTS_DIR / "pit_confusion.png"
         comp_cm_path = ARTIFACTS_DIR / "compound_confusion.png"
+        imp_path = ARTIFACTS_DIR / "pit_importance.png"
         plot_reliability(y_test, proba_test, rel_path)
         plot_confusion(y_test, pit_pred_test, [0, 1], pit_cm_path, "Pit decision (test)")
         plot_confusion(
-            comp_test["label_compound"].astype(str),
-            comp_pred,
-            list(SLICK_COMPOUNDS),
-            comp_cm_path,
-            "Compound choice (test)",
+            comp_y_test, comp_pred, list(SLICK_COMPOUNDS), comp_cm_path, "Compound choice (test)"
         )
-        for plot in (rel_path, pit_cm_path, comp_cm_path):
+        top_features = plot_feature_importance(pit_pipeline, imp_path)
+        logger.info("Top pit features: %s", ", ".join(n for n, _ in top_features[:6]))
+        for plot in (rel_path, pit_cm_path, comp_cm_path, imp_path):
             mlflow.log_artifact(str(plot))
 
         # --- Save artifacts ---
@@ -213,7 +224,10 @@ def _log_summary(metrics: dict, threshold: float) -> None:
         f"            recall={metrics['pit_recall']:.3f}"
         f"  precision={metrics['pit_precision']:.3f}  (threshold={threshold:.3f})"
     )
-    print(f"Compound head accuracy = {metrics['compound_accuracy']:.3f}  (n={n_comp})")
+    print(
+        f"Compound head accuracy = {metrics['compound_accuracy']:.3f}"
+        f"  (baseline {metrics['compound_baseline_accuracy']:.3f}, n={n_comp})"
+    )
 
 
 if __name__ == "__main__":

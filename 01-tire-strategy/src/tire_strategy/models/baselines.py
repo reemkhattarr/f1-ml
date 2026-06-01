@@ -32,6 +32,24 @@ class MajorityBaseline:
         return np.zeros(len(X), dtype=int)
 
 
+class MostFrequentCompound:
+    """Compound-head baseline: always predict the most common training compound.
+
+    The bar the learned compound model must clear — if it can't beat "always guess
+    HARD", it has learned nothing useful.
+    """
+
+    def __init__(self) -> None:
+        self.compound_: str = "HARD"
+
+    def fit(self, y: pd.Series) -> MostFrequentCompound:
+        self.compound_ = str(y.astype("string").mode().iloc[0])
+        return self
+
+    def predict(self, X: pd.DataFrame) -> npt.NDArray:
+        return np.array([self.compound_] * len(X), dtype=object)
+
+
 class RuleBasedBaseline:
     """Pit when the tyre is past its compound age, or worn under a safety car."""
 

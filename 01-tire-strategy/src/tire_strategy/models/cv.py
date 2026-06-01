@@ -23,7 +23,7 @@ from tire_strategy.models.metrics import (
     best_cost_threshold,
     expected_pit_cost,
 )
-from tire_strategy.models.pipeline import build_pit_pipeline
+from tire_strategy.models.pipeline import DEFAULT_FEATURES, FeatureSpec, build_pit_pipeline
 from tire_strategy.models.split import race_group_key
 
 _TARGET = "label_pit_window"
@@ -34,7 +34,11 @@ def _scale_pos_weight(y: np.ndarray) -> float:
 
 
 def cross_validate_pit(
-    df: pd.DataFrame, target: str = _TARGET, n_splits: int = 5, params: dict | None = None
+    df: pd.DataFrame,
+    target: str = _TARGET,
+    n_splits: int = 5,
+    params: dict | None = None,
+    features: FeatureSpec = DEFAULT_FEATURES,
 ) -> dict:
     """GroupKFold (by race weekend) evaluation of the pit head vs the baselines.
 
@@ -49,7 +53,9 @@ def cross_validate_pit(
     for fold, (tr, te) in enumerate(gkf.split(df, y, groups)):
         x_tr, x_te = df.iloc[tr], df.iloc[te]
         y_tr, y_te = y[tr], y[te]
-        model = build_pit_pipeline(scale_pos_weight=_scale_pos_weight(y_tr), **(params or {}))
+        model = build_pit_pipeline(
+            scale_pos_weight=_scale_pos_weight(y_tr), features=features, **(params or {})
+        )
         model.fit(x_tr, y_tr)
 
         thr, _ = best_cost_threshold(y_tr, model.predict_proba(x_tr)[:, 1])
@@ -77,7 +83,11 @@ def cross_validate_pit(
 
 
 def tune_pit(
-    df: pd.DataFrame, target: str = _TARGET, n_trials: int = 25, n_splits: int = 3
+    df: pd.DataFrame,
+    target: str = _TARGET,
+    n_trials: int = 25,
+    n_splits: int = 3,
+    features: FeatureSpec = DEFAULT_FEATURES,
 ) -> dict:
     """Optuna search minimising the mean cross-validated asymmetric cost."""
     groups = race_group_key(df).to_numpy()
@@ -98,7 +108,9 @@ def tune_pit(
         for tr, te in folds:
             x_tr, x_te = df.iloc[tr], df.iloc[te]
             y_tr, y_te = y[tr], y[te]
-            model = build_pit_pipeline(scale_pos_weight=_scale_pos_weight(y_tr), **params)
+            model = build_pit_pipeline(
+                scale_pos_weight=_scale_pos_weight(y_tr), features=features, **params
+            )
             model.fit(x_tr, y_tr)
             thr, _ = best_cost_threshold(y_tr, model.predict_proba(x_tr)[:, 1])
             costs.append(expected_pit_cost(y_te, model.predict_proba(x_te)[:, 1], thr))
