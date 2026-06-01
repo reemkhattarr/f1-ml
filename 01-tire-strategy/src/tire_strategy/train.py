@@ -26,6 +26,7 @@ from sklearn.frozen import FrozenEstimator
 
 from tire_strategy.config import ARTIFACTS_DIR, MLFLOW_DIR, SEED
 from tire_strategy.data import SLICK_COMPOUNDS, load_dataset
+from tire_strategy.data.labels import add_pit_window_label
 from tire_strategy.evaluate import pit_metrics, plot_confusion, plot_reliability
 from tire_strategy.models import (
     MajorityBaseline,
@@ -40,10 +41,15 @@ logger = logging.getLogger(__name__)
 
 EXPERIMENT = "tire-strategy"
 
+# Predict "a strategic pit happens within the next PIT_HORIZON laps" rather than
+# "exactly this lap" — the exact-lap target is too sparse to beat "never pit".
+PIT_HORIZON = 3
 
-def _prepare() -> dict[str, pd.DataFrame]:
-    """Load the dataset, split it temporally, and keep only eligible labelled rows."""
+
+def _prepare(horizon: int = PIT_HORIZON) -> dict[str, pd.DataFrame]:
+    """Load the dataset, add the pit-window target, split temporally, keep eligible rows."""
     df = assign_temporal_split(load_dataset())
+    df = add_pit_window_label(df, horizon=horizon)
     df = df[df["split"].notna() & df["train_eligible"].astype("boolean").fillna(False)]
     return {
         name: cast(pd.DataFrame, df[df["split"] == name].copy())
@@ -71,9 +77,10 @@ def train() -> dict:
 
     splits = _prepare()
     train_df, val_df, test_df = splits["train"], splits["val"], splits["test"]
-    y_train = train_df["label_pit"].astype(int)
-    y_val = val_df["label_pit"].astype(int)
-    y_test = test_df["label_pit"].astype(int)
+    # The pit head predicts the *window* target (see PIT_HORIZON).
+    y_train = train_df["label_pit_window"].astype(int)
+    y_val = val_df["label_pit_window"].astype(int)
+    y_test = test_df["label_pit_window"].astype(int)
 
     # scale_pos_weight = negatives / positives on the training split.
     pos = int(y_train.sum())
@@ -84,6 +91,7 @@ def train() -> dict:
         mlflow.log_params(
             {
                 "seed": SEED,
+                "pit_horizon": PIT_HORIZON,
                 "n_train": len(train_df),
                 "n_val": len(val_df),
                 "n_test": len(test_df),
