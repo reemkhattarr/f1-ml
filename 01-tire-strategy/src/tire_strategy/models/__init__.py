@@ -1,6 +1,7 @@
 """Modelling layer for the tire-strategy project: splitting, metrics, models."""
 
 from tire_strategy.models.baselines import MajorityBaseline, RuleBasedBaseline
+from tire_strategy.models.cv import cross_validate_pit, tune_pit
 from tire_strategy.models.metrics import asymmetric_pit_cost, pit_cost_matrix
 from tire_strategy.models.pipeline import build_compound_pipeline, build_pit_pipeline
 from tire_strategy.models.split import (
@@ -17,6 +18,8 @@ __all__ = [
     "asymmetric_pit_cost",
     "build_compound_pipeline",
     "build_pit_pipeline",
+    "cross_validate_pit",
     "pit_cost_matrix",
     "race_group_key",
+    "tune_pit",
 ]
