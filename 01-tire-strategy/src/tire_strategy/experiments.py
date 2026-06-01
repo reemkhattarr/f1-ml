@@ -34,6 +34,7 @@ import pandas as pd
 
 from tire_strategy.config import PROJECT_ROOT, SEED
 from tire_strategy.data import SLICK_COMPOUNDS, load_dataset
+from tire_strategy.data.features import BOOLEAN_FEATURES, NUMERIC_FEATURES
 from tire_strategy.data.labels import add_pit_window_label
 from tire_strategy.evaluate import pit_metrics
 from tire_strategy.models.baselines import (
@@ -592,11 +593,76 @@ def wet_regime() -> list[Run]:
     ]
 
 
+RAIN_NUMERIC = ("laps_in_rain_state",)
+RAIN_BOOLEAN = ("rain_just_started", "rain_just_stopped")
+
+
+def _with_rain_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add leak-safe rain-*transition* features from the per-lap `rainfall` flag.
+
+    `rainfall` is a condition observed at the start of the lap (not a timing-derived
+    value), so comparing it to the previous lap is leak-free — exactly like
+    `sc_just_deployed`. The transition is the real trigger: a dry->wet switch is when
+    teams box for intermediates; wet->dry is the crossover back to slicks.
+    """
+    out = df.sort_values(["year", "round", "driver", "lap_number"]).copy()
+    grp = out.groupby(["year", "round", "driver"])
+    rain = cast(pd.Series, out["rainfall"]).fillna(False).astype(bool)
+    prev = cast(pd.Series, grp["rainfall"].shift(1)).fillna(False).astype(bool)
+    out["rain_just_started"] = (rain & ~prev).astype("boolean")
+    out["rain_just_stopped"] = (~rain & prev).astype("boolean")
+    out["_change"] = (rain.to_numpy() != prev.to_numpy()).astype(int)
+    spell = out.groupby(["year", "round", "driver"])["_change"].cumsum()
+    out["laps_in_rain_state"] = (
+        out.assign(_spell=spell).groupby(["year", "round", "driver", "_spell"]).cumcount()
+    )
+    return cast(pd.DataFrame, out.drop(columns="_change"))
+
+
+def rain_onset() -> list[Run]:
+    """Add leak-safe rain-transition features and ablate (if it helps it helps,
+    if not it does no harm — we only adopt on a measured CV win).
+
+    Dry→rain onset is the obvious, learnable trigger (box for inters); we encode it
+    as `rain_just_started` / `rain_just_stopped` plus `laps_in_rain_state` (how long
+    the current wet/dry spell has lasted) and compare to the no-rain-feature baseline
+    on grouped CV across 2022-2025.
+    """
+    pool = _scope(_prepare(load_dataset()), MODERN_ERA)
+    rained = _with_rain_features(pool)
+    spec_rain = FeatureSpec(
+        numeric=tuple(NUMERIC_FEATURES) + RAIN_NUMERIC,
+        boolean=tuple(BOOLEAN_FEATURES) + RAIN_BOOLEAN,
+    )
+    note = (
+        "Leak-safe rain-transition features (dry->wet / wet->dry / laps-in-spell). "
+        "Adopt only if grouped-CV cost/AP improve or hold (no harm); rain is 13% of "
+        "races so the overall move is expected to be small but should not be negative."
+    )
+    return [
+        Run(
+            group="rain-onset",
+            label="baseline (rainfall only)",
+            params={"features": list(DEFAULT_FEATURES.columns), "n_splits": 5, "seed": SEED},
+            metrics=grouped_cv_metrics(pool),
+            notes=note,
+        ),
+        Run(
+            group="rain-onset",
+            label="+ rain onset/stop/spell-age",
+            params={"features": list(spec_rain.columns), "n_splits": 5, "seed": SEED},
+            metrics=grouped_cv_metrics(rained, features=spec_rain),
+            notes=note,
+        ),
+    ]
+
+
 EXPERIMENTS = {
     "season-scope": season_scope,
     "cost-ratio": cost_ratio,
     "team-feature": team_feature,
     "wet-regime": wet_regime,
+    "rain-onset": rain_onset,
 }
 
 

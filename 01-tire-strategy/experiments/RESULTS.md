@@ -322,3 +322,56 @@ _Last run: 2026-06-01T21:27:21+00:00 · 2 run(s)._
 |  |  | | cv_compound_n_pits | 2,894 |
 
 </details>
+
+## rain-onset
+
+> Leak-safe rain-transition features (dry->wet / wet->dry / laps-in-spell). Adopt only if grouped-CV cost/AP improve or hold (no harm); rain is 13% of races so the overall move is expected to be small but should not be negative.
+
+_Last run: 2026-06-01T21:45:54+00:00 · 2 run(s)._
+
+| run | label | n_rows | n_races | cv_model_cost_mean | cv_model_cost_std | cv_majority_cost_mean | cv_rule_cost_mean | cv_beats_both | cv_ap_mean | cv_compound_accuracy_mean | cv_compound_macro_f1_mean | cv_compound_baseline_accuracy_mean | cv_ap_std | cv_compound_n_pits |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| #16 | baseline (rainfall only) | 100,448 | 92.0000 | 0.3224 | 0.0095 | 0.4565 | 0.4405 | ✅ | 0.3479 | 0.6492 | 0.6166 | 0.5046 | 0.0262 | 2,894 |
+| #17 | + rain onset/stop/spell-age | 100,448 | 92.0000 | 0.3257 | 0.0131 | 0.4565 | 0.4405 | ✅ | 0.3454 | 0.6530 | 0.6199 | 0.5046 | 0.0323 | 2,894 |
+
+<details><summary>Full parameters &amp; metrics</summary>
+
+**#16 — baseline (rainfall only)**  
+`git 9a6ecaa` · 2026-06-01T21:45:54+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| features | ['lap_number', 'laps_remaining', 'tyre_age', 'stint_position', 'pit_count_so_far', 'track_temp', 'air_temp', 'gap_ahead_s', 'gap_behind_s', 'last_clean_lap_time_s', 'deg_slope_s_per_lap', 'relative_pace_s', 'compound', 'circuit', 'fresh_tyre', 'under_caution', 'flag_sc', 'flag_vsc', 'flag_yellow', 'used_second_compound', 'rainfall', 'sc_just_deployed'] | | n_rows | 100,448 |
+| n_splits | 5 | | n_races | 92.0000 |
+| seed | 42 | | cv_beats_both | ✅ |
+|  |  | | cv_ap_mean | 0.3479 |
+|  |  | | cv_model_cost_mean | 0.3224 |
+|  |  | | cv_majority_cost_mean | 0.4565 |
+|  |  | | cv_rule_cost_mean | 0.4405 |
+|  |  | | cv_ap_std | 0.0262 |
+|  |  | | cv_model_cost_std | 0.0095 |
+|  |  | | cv_compound_accuracy_mean | 0.6492 |
+|  |  | | cv_compound_macro_f1_mean | 0.6166 |
+|  |  | | cv_compound_baseline_accuracy_mean | 0.5046 |
+|  |  | | cv_compound_n_pits | 2,894 |
+
+**#17 — + rain onset/stop/spell-age**  
+`git 9a6ecaa` · 2026-06-01T21:45:54+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| features | ['lap_number', 'laps_remaining', 'tyre_age', 'stint_position', 'pit_count_so_far', 'track_temp', 'air_temp', 'gap_ahead_s', 'gap_behind_s', 'last_clean_lap_time_s', 'deg_slope_s_per_lap', 'relative_pace_s', 'laps_in_rain_state', 'compound', 'circuit', 'fresh_tyre', 'under_caution', 'flag_sc', 'flag_vsc', 'flag_yellow', 'used_second_compound', 'rainfall', 'sc_just_deployed', 'rain_just_started', 'rain_just_stopped'] | | n_rows | 100,448 |
+| n_splits | 5 | | n_races | 92.0000 |
+| seed | 42 | | cv_beats_both | ✅ |
+|  |  | | cv_ap_mean | 0.3454 |
+|  |  | | cv_model_cost_mean | 0.3257 |
+|  |  | | cv_majority_cost_mean | 0.4565 |
+|  |  | | cv_rule_cost_mean | 0.4405 |
+|  |  | | cv_ap_std | 0.0323 |
+|  |  | | cv_model_cost_std | 0.0131 |
+|  |  | | cv_compound_accuracy_mean | 0.6530 |
+|  |  | | cv_compound_macro_f1_mean | 0.6199 |
+|  |  | | cv_compound_baseline_accuracy_mean | 0.5046 |
+|  |  | | cv_compound_n_pits | 2,894 |
+
+</details>

@@ -501,6 +501,19 @@ a rescaling of it).
     (rain is an observable condition, not timing-derived, so it does not leak), and
     only adopt on a measured, non-harmful CV result. A full wet-tyre *compound* model
     stays a separate, deferred build (track-drying time is unobservable in public data).
+19. **Rain-onset transition features (`experiments rain-onset`, grouped CV 2022–2025):**
+    added leak-safe `rain_just_started` / `rain_just_stopped` / `laps_in_rain_state`
+    (the dry→wet switch is when teams box for inters; all observed at lap start, so
+    leak-free like `sc_just_deployed`). **Result — overall:** neutral-to-slightly
+    negative on the pit head (cost 0.3224 → 0.3257, *inside* the fold std, so noise;
+    AP 0.3479 → 0.3454) with a tiny compound gain (0.6492 → 0.6530). **Wet races only
+    (13 races):** directionally positive but very noisy (cost 0.5168 → 0.5087, AP
+    0.194 → 0.197, ±0.06). **Reading:** the dry→rain signal is real and helps *where it
+    matters*, but the existing per-lap `rainfall` flag already captures most of it, so
+    the transition features add complexity for a within-noise overall change. By the
+    measure-it-or-reject rule this is a **borderline reject** for the production serving
+    contract — kept tested-and-documented, available to wire in (the ablation lives in
+    `experiments.py`) if the wet-race narrative is wanted. **No harm done either way.**
 
 **Other things tried and discarded along the way:** the MLflow file store (deprecated
 → switched to SQLite); `black` (superseded by `ruff format`); `CalibratedClassifierCV(cv="prefit")`
