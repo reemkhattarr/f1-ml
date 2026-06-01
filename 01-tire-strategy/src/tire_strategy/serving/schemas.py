@@ -37,6 +37,7 @@ class RaceState(BaseModel):
     flag_yellow: bool = False
     used_second_compound: bool = False
     rainfall: bool = False
+    sc_just_deployed: bool = Field(default=False, description="The safety car came out this lap.")
 
     # --- derived from history (optional; None -> unknown) ---
     gap_ahead_s: float | None = Field(default=None, description="Gap to car ahead (s).")
