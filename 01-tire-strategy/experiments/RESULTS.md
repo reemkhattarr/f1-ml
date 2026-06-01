@@ -168,3 +168,157 @@ _Last run: 2026-06-01T21:11:37+00:00 · 7 run(s)._
 |  |  | | compound_n_test | 714.0000 |
 
 </details>
+
+## wet-regime
+
+> Scoping only. A wet-regime model is a separate build from the slick head; these counts decide whether the (thin) data supports it. The slick<->wet crossovers are the learnable transitions; rainfall is already a per-lap feature, so onset is observable but track-drying timing is not.
+
+_Last run: 2026-06-01T21:25:15+00:00 · 1 run(s)._
+
+| run | label | n_races | driver_races_using_wet | pct_races_with_wet | pct_wet_laps | races_with_wet_tyres | slick_to_wet_crossovers | wet_laps | wet_to_slick_crossovers |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| #8 | 2022-2025 wet-tyre usage & crossovers | 92.0000 | 234.0000 | 13.0000 | 6.3200 | 12.0000 | 95.0000 | 6,406 | 158.0000 |
+
+<details><summary>Full parameters &amp; metrics</summary>
+
+**#8 — 2022-2025 wet-tyre usage & crossovers**  
+`git 2d2bece` · 2026-06-01T21:25:15+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| wet_compounds | ['INTERMEDIATE', 'WET'] | | n_races | 92.0000 |
+| years | [2022, 2023, 2024, 2025] | | races_with_wet_tyres | 12.0000 |
+|  |  | | pct_races_with_wet | 13.0000 |
+|  |  | | wet_laps | 6,406 |
+|  |  | | pct_wet_laps | 6.3200 |
+|  |  | | driver_races_using_wet | 234.0000 |
+|  |  | | slick_to_wet_crossovers | 95.0000 |
+|  |  | | wet_to_slick_crossovers | 158.0000 |
+
+</details>
+
+## cost-ratio
+
+> Model beats 'never pit' and the rule-based strategist across every missed:spurious cost ratio from 2:1 to 10:1 (grouped CV, 2022-2025).
+
+_Last run: 2026-06-01T21:26:17+00:00 · 5 run(s)._
+
+| run | label | beats_majority | beats_rule | majority_cost | model_cost | rule_cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| #9 | cost ratio 2:1 (missed:spurious) | ✅ | ✅ | 0.1826 | 0.1726 | 0.2342 |
+| #10 | cost ratio 3:1 (missed:spurious) | ✅ | ✅ | 0.2739 | 0.2319 | 0.3030 |
+| #11 | cost ratio 5:1 (missed:spurious) | ✅ | ✅ | 0.4565 | 0.3224 | 0.4405 |
+| #12 | cost ratio 8:1 (missed:spurious) | ✅ | ✅ | 0.7304 | 0.4332 | 0.6468 |
+| #13 | cost ratio 10:1 (missed:spurious) | ✅ | ✅ | 0.9130 | 0.4993 | 0.7843 |
+
+<details><summary>Full parameters &amp; metrics</summary>
+
+**#9 — cost ratio 2:1 (missed:spurious)**  
+`git 2d2bece` · 2026-06-01T21:26:17+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| cost_fn | 2.0000 | | model_cost | 0.1726 |
+| cost_fp | 1.0000 | | majority_cost | 0.1826 |
+| n_splits | 5 | | rule_cost | 0.2342 |
+| seed | 42 | | beats_majority | ✅ |
+|  |  | | beats_rule | ✅ |
+
+**#10 — cost ratio 3:1 (missed:spurious)**  
+`git 2d2bece` · 2026-06-01T21:26:17+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| cost_fn | 3.0000 | | model_cost | 0.2319 |
+| cost_fp | 1.0000 | | majority_cost | 0.2739 |
+| n_splits | 5 | | rule_cost | 0.3030 |
+| seed | 42 | | beats_majority | ✅ |
+|  |  | | beats_rule | ✅ |
+
+**#11 — cost ratio 5:1 (missed:spurious)**  
+`git 2d2bece` · 2026-06-01T21:26:17+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| cost_fn | 5.0000 | | model_cost | 0.3224 |
+| cost_fp | 1.0000 | | majority_cost | 0.4565 |
+| n_splits | 5 | | rule_cost | 0.4405 |
+| seed | 42 | | beats_majority | ✅ |
+|  |  | | beats_rule | ✅ |
+
+**#12 — cost ratio 8:1 (missed:spurious)**  
+`git 2d2bece` · 2026-06-01T21:26:17+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| cost_fn | 8.0000 | | model_cost | 0.4332 |
+| cost_fp | 1.0000 | | majority_cost | 0.7304 |
+| n_splits | 5 | | rule_cost | 0.6468 |
+| seed | 42 | | beats_majority | ✅ |
+|  |  | | beats_rule | ✅ |
+
+**#13 — cost ratio 10:1 (missed:spurious)**  
+`git 2d2bece` · 2026-06-01T21:26:17+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| cost_fn | 10.0000 | | model_cost | 0.4993 |
+| cost_fp | 1.0000 | | majority_cost | 0.9130 |
+| n_splits | 5 | | rule_cost | 0.7843 |
+| seed | 42 | | beats_majority | ✅ |
+|  |  | | beats_rule | ✅ |
+
+</details>
+
+## team-feature
+
+> Adds the constructor as a categorical to both heads. Compare cv_model_cost / cv_ap_mean / cv_compound_accuracy_mean against the no-team baseline; adopt only on a consistent win (the project's measure-it-or-reject rule).
+
+_Last run: 2026-06-01T21:27:21+00:00 · 2 run(s)._
+
+| run | label | n_rows | n_races | cv_model_cost_mean | cv_model_cost_std | cv_majority_cost_mean | cv_rule_cost_mean | cv_beats_both | cv_ap_mean | cv_compound_accuracy_mean | cv_compound_macro_f1_mean | cv_compound_baseline_accuracy_mean | cv_ap_std | cv_compound_n_pits |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| #14 | baseline (no team) | 100,448 | 92.0000 | 0.3224 | 0.0095 | 0.4565 | 0.4405 | ✅ | 0.3479 | 0.6492 | 0.6166 | 0.5046 | 0.0262 | 2,894 |
+| #15 | + team (constructor) | 100,448 | 92.0000 | 0.3222 | 0.0124 | 0.4565 | 0.4405 | ✅ | 0.3499 | 0.6588 | 0.6263 | 0.5046 | 0.0304 | 2,894 |
+
+<details><summary>Full parameters &amp; metrics</summary>
+
+**#14 — baseline (no team)**  
+`git 2d2bece` · 2026-06-01T21:27:21+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| features | ['lap_number', 'laps_remaining', 'tyre_age', 'stint_position', 'pit_count_so_far', 'track_temp', 'air_temp', 'gap_ahead_s', 'gap_behind_s', 'last_clean_lap_time_s', 'deg_slope_s_per_lap', 'relative_pace_s', 'compound', 'circuit', 'fresh_tyre', 'under_caution', 'flag_sc', 'flag_vsc', 'flag_yellow', 'used_second_compound', 'rainfall', 'sc_just_deployed'] | | n_rows | 100,448 |
+| n_splits | 5 | | n_races | 92.0000 |
+| seed | 42 | | cv_beats_both | ✅ |
+|  |  | | cv_ap_mean | 0.3479 |
+|  |  | | cv_model_cost_mean | 0.3224 |
+|  |  | | cv_majority_cost_mean | 0.4565 |
+|  |  | | cv_rule_cost_mean | 0.4405 |
+|  |  | | cv_ap_std | 0.0262 |
+|  |  | | cv_model_cost_std | 0.0095 |
+|  |  | | cv_compound_accuracy_mean | 0.6492 |
+|  |  | | cv_compound_macro_f1_mean | 0.6166 |
+|  |  | | cv_compound_baseline_accuracy_mean | 0.5046 |
+|  |  | | cv_compound_n_pits | 2,894 |
+
+**#15 — + team (constructor)**  
+`git 2d2bece` · 2026-06-01T21:27:21+00:00
+
+| parameter | value | | metric | value |
+| --- | --- | --- | --- | --- |
+| features | ['lap_number', 'laps_remaining', 'tyre_age', 'stint_position', 'pit_count_so_far', 'track_temp', 'air_temp', 'gap_ahead_s', 'gap_behind_s', 'last_clean_lap_time_s', 'deg_slope_s_per_lap', 'relative_pace_s', 'compound', 'circuit', 'team', 'fresh_tyre', 'under_caution', 'flag_sc', 'flag_vsc', 'flag_yellow', 'used_second_compound', 'rainfall', 'sc_just_deployed'] | | n_rows | 100,448 |
+| n_splits | 5 | | n_races | 92.0000 |
+| seed | 42 | | cv_beats_both | ✅ |
+|  |  | | cv_ap_mean | 0.3499 |
+|  |  | | cv_model_cost_mean | 0.3222 |
+|  |  | | cv_majority_cost_mean | 0.4565 |
+|  |  | | cv_rule_cost_mean | 0.4405 |
+|  |  | | cv_ap_std | 0.0304 |
+|  |  | | cv_model_cost_std | 0.0124 |
+|  |  | | cv_compound_accuracy_mean | 0.6588 |
+|  |  | | cv_compound_macro_f1_mean | 0.6263 |
+|  |  | | cv_compound_baseline_accuracy_mean | 0.5046 |
+|  |  | | cv_compound_n_pits | 2,894 |
+
+</details>
