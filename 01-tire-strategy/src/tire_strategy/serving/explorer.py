@@ -36,7 +36,8 @@ _CSS = """
   font-size: 13px !important;
 }
 .gradio-container table th { font-weight: 600 !important; }
-.gradio-container .table-wrap, .gradio-container div[class*="table"] { overflow-x: auto !important; }
+.gradio-container .table-wrap,
+.gradio-container div[class*="table"] { overflow-x: auto !important; }
 """
 
 
