@@ -77,12 +77,13 @@ def race_notes(year: int, circuit: str) -> str:
     elif bool(wet_by_lap.all()):
         notes.append("🌧️ Wet throughout.")
     elif not bool(wet_by_lap.iloc[0]):
-        notes.append(
-            f"🌧️ Rain arrived mid-race (~lap {int(wet_by_lap[wet_by_lap].index.min())}) — a big strategy swing."
-        )
+        first_pos = int(wet_by_lap.to_numpy().argmax())  # first True
+        first_wet = int(wet_by_lap.index.to_numpy()[first_pos])
+        notes.append(f"🌧️ Rain arrived mid-race (~lap {first_wet}) — a big strategy swing.")
     else:
+        wet_laps = int(wet_by_lap.to_numpy().sum())
         notes.append(
-            f"🌦️ Mixed conditions — track dried during the race (wet for ~{int(wet_by_lap.sum())} laps)."
+            f"🌦️ Mixed conditions — track dried during the race (wet for ~{wet_laps} laps)."
         )
 
     res = _results()
