@@ -57,3 +57,7 @@ mlflow-ui:
 # Serve the trained model via FastAPI (docs at http://localhost:8000/docs).
 serve:
     uv run uvicorn tire_strategy.serving.app:app --reload --port 8000
+
+# Launch the Gradio demo (scrub a historical race: model vs reality).
+demo:
+    uv run python -m tire_strategy.serving.demo
