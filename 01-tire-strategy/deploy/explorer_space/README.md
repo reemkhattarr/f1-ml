@@ -1,5 +1,5 @@
 ---
-title: "00 · F1 Data Explorer"
+title: F1 Data Explorer
 emoji: 📊
 colorFrom: blue
 colorTo: gray

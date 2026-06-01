@@ -177,7 +177,7 @@ def build_explorer():  # pragma: no cover - UI wiring
     import gradio as gr
 
     theme = gr.themes.Soft()  # type: ignore[attr-defined]
-    with gr.Blocks(theme=theme, css=_CSS, title="00 - F1 Data Explorer") as demo:
+    with gr.Blocks(theme=theme, css=_CSS, title="F1 Data Explorer") as demo:
         gr.Markdown(
             "# 🏎️ F1 Data Explorer\n"
             "The raw F1 timing data behind the portfolio. Pick a tab, then filter by "
