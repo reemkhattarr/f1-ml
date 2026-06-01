@@ -53,3 +53,7 @@ train:
 # Launch the local MLflow UI to browse experiments.
 mlflow-ui:
     uv run mlflow ui --backend-store-uri file:01-tire-strategy/mlflow
+
+# Serve the trained model via FastAPI (docs at http://localhost:8000/docs).
+serve:
+    uv run uvicorn tire_strategy.serving.app:app --reload --port 8000

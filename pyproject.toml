@@ -48,6 +48,10 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["tire_strategy"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom: `Depends(...)` in argument defaults.
+extend-immutable-calls = ["fastapi.Depends"]
+
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "standard"
