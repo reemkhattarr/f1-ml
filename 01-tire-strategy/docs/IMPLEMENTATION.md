@@ -425,6 +425,33 @@ slice; "CV" = 5-fold grouped cross-validation across all races.
 11. **Gap-trend features (`gap_ahead_trend_s`, `gap_behind_trend_s`) (CV, ablation):**
     Δcost −0.0001, ΔAP +0.002 — within noise. **Rejected and fully reverted.** The
     static gaps + `relative_pace_s` already capture the racing context.
+12. **Safety-car deployment feature `sc_just_deployed` (CV, paired per-fold ablation):**
+    teams pit far more under a safety car (pit rate ~22% on the deployment lap vs
+    ~2.8% otherwise). Adding "the caution came out *this* lap" improved cost on
+    **5/5 folds** (mean −0.0044). **Kept** (re-tuned). A companion `laps_under_sc`
+    was tested and **rejected** (4/5 alone, and it made the combo *less* consistent,
+    3/5). Headline after this round: grouped-CV cost 0.317 → **0.311**, AP **0.343**.
+13. **Telemetry / driving-aggression features (CV, ablation on 2024):** added per-lap
+    `full_throttle_pct`, `brake_pct`, `mean_speed`, `long_load`, `throttle_modulation`
+    from the ~10 Hz car-data trace (a deliberately heavy data pull). On a 2024-only
+    grouped CV: **cost Δ −0.0002 (only 3/5 folds, per-fold swings ±0.03 — unstable),
+    AP +0.030.** So telemetry showed a possible *ranking* signal but **no stable cost
+    improvement** — likely because degradation is *already observed directly* via
+    `deg_slope_s_per_lap`, making "how hard the lap was driven" largely redundant for
+    the pit-timing model. **Not added to the production model.** The telemetry
+    extractor (`data/telemetry.py`) is kept as infrastructure for the simulator and
+    a future driving-style project, where predicting *unseen* degradation and
+    characterising driver style are the actual goals.
+
+**On circuit abrasiveness (decision):** not added as an explicit feature. It is
+already captured two ways — by `circuit` (a tree learns each track's effect) and,
+more directly, by `deg_slope_s_per_lap`, which *measures* the wear abrasiveness
+causes. An explicit abrasiveness index (e.g. a per-circuit historical degradation
+rate) is redundant for a tree that already has `circuit`, so it was not pursued.
+
+**On fuel load (decision):** not added as an explicit feature — fuel mass ∝ laps
+remaining, and `laps_remaining` is already a feature (an explicit "fuel kg" is just
+a rescaling of it).
 
 **Other things tried and discarded along the way:** the MLflow file store (deprecated
 → switched to SQLite); `black` (superseded by `ruff format`); `CalibratedClassifierCV(cv="prefit")`
