@@ -57,9 +57,9 @@ def build_explorer():  # pragma: no cover - UI wiring
 
     first = next(iter(SOURCES))
 
-    with gr.Blocks(title="F1 Data Explorer") as demo:
+    with gr.Blocks(title="00 - F1 Data Explorer") as demo:
         gr.Markdown(
-            "# F1 Data Explorer\n"
+            "# 00 - F1 Data Explorer\n"
             "Browse every field in the datasets behind the F1 tire-strategy project. "
             "Pick a dataset and filter by season, circuit, or driver."
         )
