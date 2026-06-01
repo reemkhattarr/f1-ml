@@ -3,7 +3,12 @@
 from tire_strategy.models.baselines import MajorityBaseline, RuleBasedBaseline
 from tire_strategy.models.cv import cross_validate_pit, tune_pit
 from tire_strategy.models.metrics import asymmetric_pit_cost, pit_cost_matrix
-from tire_strategy.models.pipeline import build_compound_pipeline, build_pit_pipeline
+from tire_strategy.models.pipeline import (
+    DEFAULT_FEATURES,
+    FeatureSpec,
+    build_compound_pipeline,
+    build_pit_pipeline,
+)
 from tire_strategy.models.split import (
     SPLIT_NAMES,
     assign_temporal_split,
@@ -11,7 +16,9 @@ from tire_strategy.models.split import (
 )
 
 __all__ = [
+    "DEFAULT_FEATURES",
     "SPLIT_NAMES",
+    "FeatureSpec",
     "MajorityBaseline",
     "RuleBasedBaseline",
     "assign_temporal_split",
