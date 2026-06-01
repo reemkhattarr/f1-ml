@@ -75,10 +75,9 @@ def race_notes(year: int, circuit: str) -> str:
 
     res = _results()
     if res is not None:
-        rr = res[(res["year"] == year) & (res["circuit"] == circuit)]
-        dsq = rr.loc[
-            rr["Status"].astype(str).str.contains("Disq", case=False, na=False), "Abbreviation"
-        ]
+        rr = cast(pd.DataFrame, res[(res["year"] == year) & (res["circuit"] == circuit)])
+        status = cast(pd.Series, rr["Status"]).astype(str)
+        dsq = rr.loc[status.str.contains("Disq", case=False, na=False), "Abbreviation"]
         if len(dsq):
             notes.append(f"⚠️ Disqualified: {', '.join(dsq.astype(str))}.")
     return "  \n".join(notes)
