@@ -8,10 +8,9 @@ the model genuinely beats the baselines — and how much that estimate wobbles
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
-import optuna
 import pandas as pd
 from sklearn.metrics import average_precision_score, f1_score
 from sklearn.model_selection import GroupKFold
@@ -33,6 +32,9 @@ from tire_strategy.models.pipeline import (
     build_pit_pipeline,
 )
 from tire_strategy.models.split import race_group_key
+
+if TYPE_CHECKING:
+    import optuna
 
 _TARGET = "label_pit_window"
 
@@ -172,6 +174,8 @@ def tune_pit(
     features: FeatureSpec = DEFAULT_FEATURES,
 ) -> dict:
     """Optuna search minimising the mean cross-validated asymmetric cost."""
+    import optuna  # lazy: training-only, so serving never needs it
+
     groups = race_group_key(df).to_numpy()
     y = df[target].astype(int).to_numpy()
     folds = list(GroupKFold(n_splits=n_splits).split(df, y, groups))

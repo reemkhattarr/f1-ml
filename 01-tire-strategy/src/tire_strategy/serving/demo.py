@@ -1,8 +1,10 @@
 """Gradio demo: scrub through a historical race and see, at each lap, what the
 model would have recommended versus what the team actually did.
 
-The data/prediction logic is kept separate from the Gradio UI so it can be unit
--tested. Requires trained artifacts (``just train``).
+Reads the **pre-built dataset parquet** (not live FastF1), so it is instant and
+deployable on a free, ephemeral host without hitting FastF1's rate limit. The
+data/prediction logic is separate from the Gradio UI so it can be unit-tested.
+Requires the dataset (`just data`) and trained artifacts (`just train`).
 """
 
 from __future__ import annotations
@@ -13,44 +15,29 @@ from typing import cast
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from tire_strategy.data import build_features, load_labelled_race
+from tire_strategy.data import load_dataset
 from tire_strategy.serving.models import ModelBundle, load_bundle
 
 plt.switch_backend("Agg")
 
-SEASONS = [2022, 2023, 2024]
-# Circuits present across 2022-2024 (FastF1 accepts these location names).
-CIRCUITS = [
-    "Bahrain",
-    "Jeddah",
-    "Melbourne",
-    "Imola",
-    "Miami",
-    "Barcelona",
-    "Monaco",
-    "Baku",
-    "Montreal",
-    "Silverstone",
-    "Spielberg",
-    "Budapest",
-    "Spa",
-    "Zandvoort",
-    "Monza",
-    "Singapore",
-    "Suzuka",
-    "Austin",
-    "Mexico City",
-    "Interlagos",
-    "Las Vegas",
-    "Lusail",
-    "Abu Dhabi",
-]
+
+@lru_cache(maxsize=1)
+def _dataset() -> pd.DataFrame:
+    return load_dataset()
 
 
-@lru_cache(maxsize=8)
+def available_years() -> list[int]:
+    return sorted(int(y) for y in _dataset()["year"].dropna().unique())
+
+
+def circuits_for(year: int) -> list[str]:
+    df = _dataset()
+    return sorted(df.loc[df["year"] == year, "circuit"].dropna().unique().tolist())
+
+
 def race_table(year: int, circuit: str) -> pd.DataFrame:
-    """Cached per-race feature table (labels + leak-safe features)."""
-    return build_features(load_labelled_race(year, circuit))
+    df = _dataset()
+    return cast(pd.DataFrame, df[(df["year"] == year) & (df["circuit"] == circuit)])
 
 
 def drivers_in(year: int, circuit: str) -> list[str]:
@@ -120,6 +107,10 @@ def build_demo():  # pragma: no cover - UI wiring
     import gradio as gr
 
     bundle = load_bundle()
+    years = available_years()
+    default_year = years[-1]
+    default_circuits = circuits_for(default_year)
+    default_circuit = "Monza" if "Monza" in default_circuits else default_circuits[0]
 
     with gr.Blocks(title="F1 Tire Strategy") as demo:
         gr.Markdown(
@@ -127,18 +118,21 @@ def build_demo():  # pragma: no cover - UI wiring
             "compare the model's recommendation with what the team actually did."
         )
         with gr.Row():
-            year = gr.Dropdown(SEASONS, value=2024, label="Season")
-            circuit = gr.Dropdown(CIRCUITS, value="Monza", label="Circuit")
+            year = gr.Dropdown(years, value=default_year, label="Season")
+            circuit = gr.Dropdown(default_circuits, value=default_circuit, label="Circuit")
             driver = gr.Dropdown([], label="Driver")
             load_btn = gr.Button("Load race", variant="primary")
-        lap = gr.Slider(1, 70, step=1, value=1, label="Lap")
+        lap = gr.Slider(1, 78, step=1, value=1, label="Lap")
         out = gr.Markdown()
         plot = gr.Plot()
 
+        def _on_year(yr):
+            choices = circuits_for(yr)
+            return gr.update(choices=choices, value=choices[0] if choices else None)
+
         def _load(yr, ci):
             drivers = drivers_in(yr, ci)
-            top = drivers[0] if drivers else None
-            return gr.update(choices=drivers, value=top)
+            return gr.update(choices=drivers, value=drivers[0] if drivers else None)
 
         def _predict(yr, ci, dr, lp):
             if not dr:
@@ -146,6 +140,7 @@ def build_demo():  # pragma: no cover - UI wiring
             pred = lap_prediction(bundle, yr, ci, dr, int(lp))
             return _format(pred), probability_curve(bundle, yr, ci, dr)
 
+        year.change(_on_year, [year], [circuit])
         load_btn.click(_load, [year, circuit], [driver])
         for ctrl in (driver, lap):
             ctrl.change(_predict, [year, circuit, driver, lap], [out, plot])

@@ -16,27 +16,43 @@ just demo                  # Gradio demo in the browser
 
 ## Gradio demo → Hugging Face Spaces (free)
 
-The demo (`tire_strategy.serving.demo`) needs three things at runtime: the
-`tire_strategy` package, the trained artifacts (`artifacts/*.joblib`,
-`metadata.json`), and race data.
+The demo (`tire_strategy.serving.demo`) reads the **pre-built dataset parquet**, not
+live FastF1, so it has no rate-limit fragility on an ephemeral Space. Everything
+needed is assembled by a build script.
 
-**Important caveat (honest):** the demo currently pulls race data **live from
-FastF1**, which is subject to a ~500-calls/hour rate limit. That is fine locally
-(cached after first use) but fragile on an ephemeral Space. The recommended
-deployment is to **pre-build a small parquet of a few showcase races and ship it
-in the Space**, then have the demo read from that parquet instead of live FastF1.
-This change is not yet implemented — it is the concrete next step for a hosted demo.
+**1. Build the deployable Space folder** (after `just data` + `just train`):
 
-**Outline of the deployment (once the above is done):**
-1. Create a Gradio Space on Hugging Face.
-2. Include: the `src/tire_strategy` package (or `pip install` it), `artifacts/`
-   (the trained models — these are gitignored in the main repo, so they must be
-   added to the Space explicitly), a Space `app.py` that calls `build_demo().launch()`,
-   and a `requirements.txt`.
-3. Push to the Space's git remote.
+```bash
+just build-space        # -> 01-tire-strategy/deploy/space_build/  (~6 MB, gitignored)
+```
 
-I can scaffold the Space (app entry + requirements + the parquet-backed demo
-variant) when you have a Hugging Face account ready.
+This produces a self-contained folder mirroring the repo layout (so the package's
+path config resolves), bundling the package source, the trained artifacts
+(`*.joblib` + `metadata.json`), the tuned config, the dataset parquet, and the
+Space's `app.py` / `requirements.txt` / `README.md` (with the Gradio SDK header).
+It is verified to load the models and predict from its own layout.
+
+**2. Create a Gradio Space** on Hugging Face (one-time):
+
+```bash
+pip install huggingface_hub           # if needed
+huggingface-cli login                 # paste a token from hf.co/settings/tokens
+huggingface-cli repo create f1-tire-strategy --type space --space_sdk gradio
+```
+
+**3. Push the assembled folder to the Space:**
+
+```bash
+cd 01-tire-strategy/deploy/space_build
+git init && git remote add origin https://huggingface.co/spaces/<user>/f1-tire-strategy
+git add -A && git commit -m "Deploy F1 tire-strategy demo"
+git push -u origin main
+```
+
+The Space builds from `requirements.txt` and launches `app.py`. The demo source
+files live in `deploy/hf_space/`; the build script copies them.
+
+> Steps 2–3 need your Hugging Face account — happy to walk through them together.
 
 ## FastAPI service → Render / Railway (free tier)
 
