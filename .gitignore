@@ -25,6 +25,7 @@ htmlcov/
 **/mlflow/
 **/artifacts/
 **/space_build/
+**/explorer_space_build/
 mlruns/
 mlartifacts/
 *.pkl

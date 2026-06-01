@@ -442,6 +442,14 @@ slice; "CV" = 5-fold grouped cross-validation across all races.
     extractor (`data/telemetry.py`) is kept as infrastructure for the simulator and
     a future driving-style project, where predicting *unseen* degradation and
     characterising driver style are the actual goals.
+14. **Dirty-air / gap-degradation feature (CV, paired per-fold ablation):** running
+    close behind another car (dirty air) degrades tyres faster, so we tested
+    "cumulative laps this stint within ~1.5 s of the car ahead" (derived from the
+    leak-safe `gap_ahead_s`). Result across thresholds: Δcost ≈ −0.0013 on **only
+    3/5 folds** (1.0 s threshold: +0.0002, 2/5). Marginal and inconsistent — same
+    territory as the rejected `driver`/gap-trend features. **Rejected.** The physics
+    is real, but `deg_slope_s_per_lap` already *measures* the degradation (including
+    any dirty-air contribution), so the gap-based proxy is redundant and noisy.
 
 **On circuit abrasiveness (decision):** not added as an explicit feature. It is
 already captured two ways — by `circuit` (a tree learns each track's effect) and,
