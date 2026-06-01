@@ -61,3 +61,7 @@ serve:
 # Launch the Gradio demo (scrub a historical race: model vs reality).
 demo:
     uv run python -m tire_strategy.serving.demo
+
+# Assemble a deployable Hugging Face Space (needs `just data` + `just train` first).
+build-space:
+    uv run python 01-tire-strategy/deploy/build_space.py
