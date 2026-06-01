@@ -203,11 +203,12 @@ def train() -> dict:
         (ARTIFACTS_DIR / "metadata.json").write_text(json.dumps(metadata, indent=2))
         mlflow.log_artifact(str(ARTIFACTS_DIR / "metadata.json"))
 
-    _log_summary(metrics, threshold)
+    holdout_season = int(test_df["year"].max())
+    _log_summary(metrics, threshold, holdout_season)
     return metrics
 
 
-def _log_summary(metrics: dict, threshold: float) -> None:
+def _log_summary(metrics: dict, threshold: float, holdout_season: int) -> None:
     ap = metrics["pit_average_precision"]
     auc = metrics["pit_roc_auc"]
     print("\n=== Tire-strategy model results ===")
@@ -222,7 +223,7 @@ def _log_summary(metrics: dict, threshold: float) -> None:
         metrics["cv_majority_cost_mean"], metrics["cv_rule_cost_mean"]
     )
     print(f"            -> beats both baselines: {beats}")
-    print(f"Temporal holdout (late-2024): pit AP={ap:.3f}  ROC-AUC={auc:.3f}")
+    print(f"Temporal holdout (late {holdout_season}): pit AP={ap:.3f}  ROC-AUC={auc:.3f}")
     print(
         f"            recall={metrics['pit_recall']:.3f}"
         f"  precision={metrics['pit_precision']:.3f}  (threshold={threshold:.3f})"

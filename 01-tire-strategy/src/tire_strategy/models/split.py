@@ -24,8 +24,8 @@ def race_group_key(df: pd.DataFrame) -> pd.Series:
 
 def assign_temporal_split(
     df: pd.DataFrame,
-    train_seasons: tuple[int, ...] = (2022, 2023),
-    holdout_season: int = 2024,
+    train_seasons: tuple[int, ...] = (2022, 2023, 2024),
+    holdout_season: int = 2025,
     val_round_max: int = 12,
 ) -> pd.DataFrame:
     """Add a ``split`` column with values from :data:`SPLIT_NAMES`.

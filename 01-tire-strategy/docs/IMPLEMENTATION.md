@@ -23,16 +23,21 @@ tyre-strategy decision a race engineer would make:
 2. **Compound head** — if it pits, onto which slick compound (SOFT / MEDIUM / HARD)?
 
 It is built entirely on free, public F1 timing data via the **FastF1** library, on
-2022–2024 (the current ground-effect regulation era). The headline result:
+**2022–2025** (the current ground-effect regulation era). Adding 2025 to training
+was a measured improvement, not an assumption — see the season-scope study (§12 #15)
+and the committed `experiments/RESULTS.md`. The headline result:
 
-| Metric (5-fold grouped CV across all 68 races) | Model | "Never pit" | Rule-based |
+| Metric (5-fold grouped CV across all 92 races) | Model | "Never pit" | Rule-based |
 |---|---|---|---|
-| Asymmetric strategic cost (lower better) | **0.317 ± 0.033** | 0.462 | 0.450 |
-| Average precision (pit head) | **0.335** | — | — |
-| Compound accuracy / macro-F1 | **0.668 / 0.62** | 0.526 (most-frequent) | — |
+| Asymmetric strategic cost (lower better) | **0.312 ± 0.010** | 0.457 | 0.441 |
+| Average precision (pit head) | **0.354** | — | — |
+| Compound accuracy / macro-F1 | **0.649 / 0.62** | 0.505 (most-frequent) | — |
 
-The model beats both baselines by ~27–31% on cost, and the win holds across every
-cost ratio from 2:1 to 10:1 (see §11).
+The model beats both baselines by ~29–32% on cost, and the win holds across every
+cost ratio from 2:1 to 10:1 (see §11). The production split trains on 2022–2024 and
+holds out 2025 (late-2025 temporal holdout: ROC-AUC 0.83); folding 2025 into the
+training pool also cut the CV fold std ~4× (0.039 → 0.010), a much more stable
+estimate.
 
 ---
 
