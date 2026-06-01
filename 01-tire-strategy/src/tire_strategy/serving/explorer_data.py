@@ -54,20 +54,22 @@ def build_explorer_data(
         try:
             session = fastf1.get_session(int(year), int(rnd), "R")
             session.load(laps=True, weather=True, telemetry=False, messages=False)
-        except Exception as exc:
+            meta = {"year": int(year), "round": int(rnd), "circuit": str(session.event["Location"])}
+            laps_all.append(_display_safe(session.laps).assign(**meta))
+            weather_all.append(_display_safe(session.weather_data).assign(**meta))
+            results_all.append(_display_safe(session.results).assign(**meta))
+            logger.info("done %s round %s", year, rnd)
+        except Exception as exc:  # noqa: BLE001 - one bad race must not abort the build
             logger.warning("skip %s round %s: %s", year, rnd, exc)
-            continue
-        meta = {"year": int(year), "round": int(rnd), "circuit": str(session.event["Location"])}
-        laps_all.append(_display_safe(session.laps).assign(**meta))
-        weather_all.append(_display_safe(session.weather_data).assign(**meta))
-        results_all.append(_display_safe(session.results).assign(**meta))
-        logger.info("done %s round %s", year, rnd)
 
     raw_path.parent.mkdir(parents=True, exist_ok=True)
-    pd.concat(laps_all, ignore_index=True).to_parquet(raw_path, index=False)
-    pd.concat(weather_all, ignore_index=True).to_parquet(weather_path, index=False)
-    pd.concat(results_all, ignore_index=True).to_parquet(results_path, index=False)
-    logger.info("Wrote raw laps / weather / results.")
+    for frames, path in ((laps_all, raw_path), (weather_all, weather_path), (results_all, results_path)):
+        combined = pd.concat(frames, ignore_index=True)
+        for col in combined.columns:  # coerce leftover objects so pyarrow never chokes
+            if combined[col].dtype == "object":
+                combined[col] = combined[col].astype(str)
+        combined.to_parquet(path, index=False)
+        logger.info("Wrote %s (%d rows)", path.name, len(combined))
 
 
 if __name__ == "__main__":
