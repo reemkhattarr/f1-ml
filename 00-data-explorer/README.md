@@ -20,6 +20,22 @@ It sits *before* the four ML projects (`01`–`04`) because it's about
 **seeing the raw material** — the F1 timing data — rather than modelling it. It's
 the first thing a visitor should open to understand what the data looks like.
 
+## Structure & roadmap (read this looking back)
+
+Today, the shared **FastF1 ingestion layer** (`load_race`, `load_results`, the
+calendar, and the FastF1 cache) and the processed parquets physically live inside
+the `tire_strategy` package under `01-tire-strategy/`, because `01` was built first.
+This explorer reads those parquets.
+
+**The intended end-state** — to be done **as the first step of Project 02** (the
+natural, low-risk moment, when a second project actually needs the ingestion) — is
+to extract that ingestion layer into a standalone shared foundation here under `00`,
+relocate the FastF1 cache + parquets to a shared top-level `data/`, and have `01–04`
+all import the `00` foundation. That makes the dependency direction correct
+("everything is built on `00`") and is verifiable against two real consumers rather
+than designed against one. It is deliberately deferred until then to avoid
+refactoring a working, deployed system at the wrong time.
+
 ## Implementation
 
 The app reuses the shared `tire_strategy` package (it reads the parquets that
