@@ -26,6 +26,7 @@ from pathlib import Path
 
 import fastf1
 import pandas as pd
+from fastf1.exceptions import RateLimitExceededError
 
 from tire_strategy.config import DATA_DIR, enable_cache
 
@@ -95,7 +96,29 @@ def _extract_session(year: int, rnd: int, session_name: str) -> dict[str, pd.Dat
     return out
 
 
-def _write(frames: list[pd.DataFrame], path: Path) -> None:
+def _load_existing(path: Path) -> pd.DataFrame | None:
+    """Prior output for resume. Pre-`session` parquets are treated as race-only."""
+    if not path.exists():
+        return None
+    df = pd.read_parquet(path)
+    if "session" not in df.columns:
+        df = df.assign(session="R")  # legacy race-only build
+    return df
+
+
+def _done_keys(*frames: pd.DataFrame | None) -> set[tuple[int, int, str]]:
+    """The (year, round, session) triples already present, so we never refetch."""
+    done: set[tuple[int, int, str]] = set()
+    for df in frames:
+        if df is None or not {"year", "round", "session"} <= set(df.columns):
+            continue
+        for y, r, s in df[["year", "round", "session"]].drop_duplicates().itertuples(index=False):
+            done.add((int(y), int(r), str(s)))
+    return done
+
+
+def _write(existing: pd.DataFrame | None, new: list[pd.DataFrame], path: Path) -> None:
+    frames = [f for f in [existing, *new] if f is not None and len(f)]
     if not frames:
         return
     combined = pd.concat(frames, ignore_index=True)
@@ -113,14 +136,30 @@ def build_explorer_data(
     weather_path: Path = WEATHER_PATH,
     results_path: Path = RESULTS_PATH,
 ) -> None:
-    """Assemble laps / weather / results parquets across all sessions and seasons."""
+    """Assemble laps / weather / results parquets across all sessions and seasons.
+
+    **Resumable and rate-limit-aware.** FastF1's API allows ~500 calls/hour, far
+    fewer than a cold all-sessions download needs, so this skips sessions already
+    in the output and — when the rate limit is hit — saves everything gathered so
+    far and stops cleanly. Re-run later (the cache holds prior downloads) to
+    continue; progress accumulates until coverage is complete.
+    """
     enable_cache()
+    existing_laps = _load_existing(raw_path)
+    existing_weather = _load_existing(weather_path)
+    existing_results = _load_existing(results_path)
+    done = _done_keys(existing_laps, existing_weather, existing_results)
+    logger.info("Resuming: %d session(s) already built", len(done))
+
     laps_all: list[pd.DataFrame] = []
     weather_all: list[pd.DataFrame] = []
     results_all: list[pd.DataFrame] = []
-    n_sessions = 0
+    n_new = 0
+    rate_limited = False
 
     for year in seasons:
+        if rate_limited:
+            break
         try:
             schedule = fastf1.get_event_schedule(year, include_testing=False)
         except Exception as exc:  # pragma: no cover - network/availability
@@ -128,12 +167,26 @@ def build_explorer_data(
             continue
 
         for event in schedule.to_dict("records"):
+            if rate_limited:
+                break
             rnd = int(event.get("RoundNumber", 0) or 0)
             if rnd <= 0:
                 continue
             for session_name in _event_sessions(pd.Series(event)):
+                code = _SESSION_CODE.get(session_name, session_name)
+                if (year, rnd, code) in done:
+                    continue
                 try:
                     extracted = _extract_session(year, rnd, session_name)
+                except RateLimitExceededError:
+                    # Hard cap reached — stop and persist progress; resume later.
+                    logger.warning(
+                        "FastF1 rate limit reached after %d new session(s); "
+                        "saving progress. Re-run to continue.",
+                        n_new,
+                    )
+                    rate_limited = True
+                    break
                 except Exception as exc:
                     # Future/cancelled/unavailable sessions are expected; debug only.
                     logger.debug("skip %s R%s %s: %s", year, rnd, session_name, exc)
@@ -145,13 +198,13 @@ def build_explorer_data(
                     weather_all.append(extracted["weather"])
                 if "results" in extracted:
                     results_all.append(extracted["results"])
-                n_sessions += 1
+                n_new += 1
                 logger.info("done %s R%s %s", year, rnd, session_name)
 
-    logger.info("Extracted %d sessions across %s", n_sessions, list(seasons))
-    _write(laps_all, raw_path)
-    _write(weather_all, weather_path)
-    _write(results_all, results_path)
+    logger.info("Added %d new session(s) this run", n_new)
+    _write(existing_laps, laps_all, raw_path)
+    _write(existing_weather, weather_all, weather_path)
+    _write(existing_results, results_all, results_path)
 
 
 def _parse_seasons(argv: list[str]) -> tuple[int, ...]:
