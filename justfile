@@ -65,6 +65,16 @@ refresh:
 deploy-demo:
     uv run hf upload reemkhattar/f1-tire-strategy 01-tire-strategy/deploy/space_build . --repo-type space
 
+# Launch the data explorer locally (browse all dataset fields).
+explorer:
+    uv run python -m tire_strategy.serving.explorer
+
+# Build + push the data-explorer Space to Hugging Face.
+build-explorer-space:
+    uv run python 01-tire-strategy/deploy/build_explorer_space.py
+deploy-explorer:
+    uv run hf upload reemkhattar/f1-data-explorer 01-tire-strategy/deploy/explorer_space_build . --repo-type space
+
 # Tune the pit-head hyperparameters (Optuna) -> artifacts/best_params.json.
 tune *ARGS:
     uv run python -m tire_strategy.models.cv {{ARGS}}
