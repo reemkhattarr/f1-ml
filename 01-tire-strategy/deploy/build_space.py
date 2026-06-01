@@ -44,6 +44,10 @@ def main() -> int:
     shutil.copytree(PROJECT / "configs", inner / "configs")
     (inner / "data" / "processed").mkdir(parents=True, exist_ok=True)
     shutil.copy(dataset, inner / "data" / "processed" / dataset.name)
+    # Optional: race results power the demo's classification panel + notes.
+    results = PROJECT / "data" / "processed" / "results.parquet"
+    if results.exists():
+        shutil.copy(results, inner / "data" / "processed" / results.name)
     for name in ("app.py", "requirements.txt", "README.md"):
         shutil.copy(TEMPLATE / name, OUT / name)
 

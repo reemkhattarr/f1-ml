@@ -15,15 +15,73 @@ from typing import cast
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from tire_strategy.config import DATA_DIR
 from tire_strategy.data import load_dataset
 from tire_strategy.serving.models import ModelBundle, load_bundle
 
 plt.switch_backend("Agg")
 
+_RESULTS_PATH = DATA_DIR / "processed" / "results.parquet"
+
 
 @lru_cache(maxsize=1)
 def _dataset() -> pd.DataFrame:
     return load_dataset()
+
+
+@lru_cache(maxsize=1)
+def _results() -> pd.DataFrame | None:
+    return pd.read_parquet(_RESULTS_PATH) if _RESULTS_PATH.exists() else None
+
+
+def race_results(year: int, circuit: str) -> pd.DataFrame:
+    """Final classification for a race, ordered by finishing position."""
+    res = _results()
+    if res is None:
+        return pd.DataFrame()
+    df = cast(pd.DataFrame, res[(res["year"] == year) & (res["circuit"] == circuit)]).copy()
+    df["_pos"] = cast(pd.Series, pd.to_numeric(df["Position"], errors="coerce"))
+    df = df.sort_values("_pos")
+    df["Position"] = df["_pos"].astype("Int64")
+    if "GridPosition" in df.columns:
+        df["Grid"] = cast(pd.Series, pd.to_numeric(df["GridPosition"], errors="coerce")).astype(
+            "Int64"
+        )
+    rename = {"Abbreviation": "Driver", "TeamName": "Team"}
+    keep = ["Position", "Abbreviation", "TeamName", "Grid", "Status", "Points"]
+    return cast(pd.DataFrame, df[[c for c in keep if c in df.columns]]).rename(columns=rename)
+
+
+def race_notes(year: int, circuit: str) -> str:
+    """A short, auto-derived summary of events that shaped the race's strategy."""
+    table = race_table(year, circuit)
+    if table.empty:
+        return ""
+    total_laps = int(table["lap_number"].max())
+    by_lap = table.groupby("lap_number")
+    sc_laps = int(by_lap["under_caution"].apply(lambda s: bool(s.fillna(False).any())).sum())
+    red = bool(table["flag_red"].fillna(False).any()) if "flag_red" in table else False
+    wet = bool(table["rainfall"].fillna(False).any()) if "rainfall" in table else False
+
+    notes = [f"**{circuit} {year}** — {total_laps} laps."]
+    notes.append(
+        f"🟡 Safety car / VSC on ~{sc_laps} lap(s) — a cheap-stop window."
+        if sc_laps
+        else "🟢 Green flag-to-flag (no safety car)."
+    )
+    if red:
+        notes.append("🔴 Race was red-flagged (free tyre change).")
+    notes.append("🌧️ Wet or mixed conditions." if wet else "☀️ Dry running.")
+
+    res = _results()
+    if res is not None:
+        rr = res[(res["year"] == year) & (res["circuit"] == circuit)]
+        dsq = rr.loc[
+            rr["Status"].astype(str).str.contains("Disq", case=False, na=False), "Abbreviation"
+        ]
+        if len(dsq):
+            notes.append(f"⚠️ Disqualified: {', '.join(dsq.astype(str))}.")
+    return "  \n".join(notes)
 
 
 def available_years() -> list[int]:
@@ -122,9 +180,15 @@ def build_demo():  # pragma: no cover - UI wiring
             circuit = gr.Dropdown(default_circuits, value=default_circuit, label="Circuit")
             driver = gr.Dropdown([], label="Driver")
             load_btn = gr.Button("Load race", variant="primary")
-        lap = gr.Slider(1, 78, step=1, value=1, label="Lap")
-        out = gr.Markdown()
-        plot = gr.Plot()
+        notes = gr.Markdown()
+        with gr.Row():
+            with gr.Column(scale=2):
+                lap = gr.Slider(1, 78, step=1, value=1, label="Lap")
+                out = gr.Markdown()
+                plot = gr.Plot()
+            with gr.Column(scale=1):
+                gr.Markdown("### Final classification")
+                results = gr.Dataframe(interactive=False, wrap=True, max_height=520)
 
         def _on_year(yr):
             choices = circuits_for(yr)
@@ -132,7 +196,11 @@ def build_demo():  # pragma: no cover - UI wiring
 
         def _load(yr, ci):
             drivers = drivers_in(yr, ci)
-            return gr.update(choices=drivers, value=drivers[0] if drivers else None)
+            return (
+                gr.update(choices=drivers, value=drivers[0] if drivers else None),
+                race_notes(yr, ci),
+                race_results(yr, ci),
+            )
 
         def _predict(yr, ci, dr, lp):
             if not dr:
@@ -141,7 +209,7 @@ def build_demo():  # pragma: no cover - UI wiring
             return _format(pred), probability_curve(bundle, yr, ci, dr)
 
         year.change(_on_year, [year], [circuit])
-        load_btn.click(_load, [year, circuit], [driver])
+        load_btn.click(_load, [year, circuit], [driver, notes, results])
         for ctrl in (driver, lap):
             ctrl.change(_predict, [year, circuit, driver, lap], [out, plot])
 

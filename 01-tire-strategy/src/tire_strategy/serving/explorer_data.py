@@ -59,11 +59,15 @@ def build_explorer_data(
             weather_all.append(_display_safe(session.weather_data).assign(**meta))
             results_all.append(_display_safe(session.results).assign(**meta))
             logger.info("done %s round %s", year, rnd)
-        except Exception as exc:  # noqa: BLE001 - one bad race must not abort the build
+        except Exception as exc:
             logger.warning("skip %s round %s: %s", year, rnd, exc)
 
     raw_path.parent.mkdir(parents=True, exist_ok=True)
-    for frames, path in ((laps_all, raw_path), (weather_all, weather_path), (results_all, results_path)):
+    for frames, path in (
+        (laps_all, raw_path),
+        (weather_all, weather_path),
+        (results_all, results_path),
+    ):
         combined = pd.concat(frames, ignore_index=True)
         for col in combined.columns:  # coerce leftover objects so pyarrow never chokes
             if combined[col].dtype == "object":
