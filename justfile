@@ -46,6 +46,10 @@ data *SEASONS:
 stint-data:
     uv run python -m tire_strategy.simulator.data
 
+# Estimate per-circuit pit-loss for the simulator (Project 1.2).
+pitloss-data:
+    uv run python -m tire_strategy.simulator.pitloss
+
 # Incrementally add new/missing races to the dataset (backfill or post-race).
 # e.g. `just update-data 2025 2026`. No args -> the default seasons.
 update-data *SEASONS:
