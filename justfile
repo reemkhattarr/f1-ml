@@ -41,3 +41,11 @@ check: lint types test
 # fast thereafter (cached). Optionally pass seasons, e.g. `just data 2024`.
 data *SEASONS:
     uv run python -m tire_strategy.data.dataset {{SEASONS}}
+
+# Train + evaluate both model heads, logging to local MLflow.
+train:
+    uv run python -m tire_strategy.train
+
+# Launch the local MLflow UI to browse experiments.
+mlflow-ui:
+    uv run mlflow ui --backend-store-uri file:01-tire-strategy/mlflow

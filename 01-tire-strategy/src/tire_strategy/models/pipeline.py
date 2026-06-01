@@ -63,7 +63,10 @@ def _preprocessor() -> ColumnTransformer:
 
 
 def _coerce_step() -> FunctionTransformer:
-    return FunctionTransformer(_to_model_frame, feature_names_out="one-to-one")
+    # No feature_names_out: this step selects a subset of columns (it does not map
+    # input names one-to-one). It returns a named DataFrame, so the downstream
+    # ColumnTransformer still selects the compound column by name.
+    return FunctionTransformer(_to_model_frame)
 
 
 def _pipeline(clf: LGBMClassifier) -> Pipeline:
