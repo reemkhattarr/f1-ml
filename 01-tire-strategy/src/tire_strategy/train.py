@@ -39,6 +39,7 @@ from tire_strategy.models import (
     assign_temporal_split,
     build_compound_pipeline,
     build_pit_pipeline,
+    cross_validate_compound,
     cross_validate_pit,
 )
 from tire_strategy.models.baselines import MostFrequentCompound
@@ -120,6 +121,8 @@ def train() -> dict:
         logger.info("Grouped CV across all races ...")
         cv = cross_validate_pit(cv_df, n_splits=5, params=tuned)
         mlflow.log_metrics({f"cv_{k}": v for k, v in cv["agg"].items()})
+        cv_comp = cross_validate_compound(cv_df, n_splits=5)
+        mlflow.log_metrics({f"cv_compound_{k}": v for k, v in cv_comp.items()})
 
         # --- Pit head: fit on train, calibrate on val (deployment-style holdout) ---
         logger.info("Fitting pit head (scale_pos_weight=%.2f) ...", scale_pos_weight)
@@ -165,6 +168,7 @@ def train() -> dict:
             **{f"pit_{k}": v for k, v in pit_test.items()},
             **{f"cv_{k}": v for k, v in cv["agg"].items()},
             **baseline_costs,
+            **{f"cv_compound_{k}": v for k, v in cv_comp.items()},
             "compound_accuracy": compound_acc,
             "compound_baseline_accuracy": compound_base_acc,
             "compound_n_test": float(len(comp_test)),
@@ -206,7 +210,6 @@ def train() -> dict:
 def _log_summary(metrics: dict, threshold: float) -> None:
     ap = metrics["pit_average_precision"]
     auc = metrics["pit_roc_auc"]
-    n_comp = int(metrics["compound_n_test"])
     print("\n=== Tire-strategy model results ===")
     print("Grouped CV across all races (trustworthy estimate, lower cost is better):")
     print(
@@ -225,8 +228,9 @@ def _log_summary(metrics: dict, threshold: float) -> None:
         f"  precision={metrics['pit_precision']:.3f}  (threshold={threshold:.3f})"
     )
     print(
-        f"Compound head accuracy = {metrics['compound_accuracy']:.3f}"
-        f"  (baseline {metrics['compound_baseline_accuracy']:.3f}, n={n_comp})"
+        f"Compound head (grouped CV): acc={metrics['cv_compound_accuracy_mean']:.3f}"
+        f"  macroF1={metrics['cv_compound_macro_f1_mean']:.3f}"
+        f"  (baseline {metrics['cv_compound_baseline_accuracy_mean']:.3f})"
     )
 
 

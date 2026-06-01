@@ -102,3 +102,19 @@ def test_cross_validate_pit_runs_and_reports_baselines() -> None:
     assert {"ap_mean", "model_cost_mean", "majority_cost_mean", "rule_cost_mean"} <= set(
         result["agg"]
     )
+
+
+def test_cross_validate_compound_reports_macro_f1_and_baseline() -> None:
+    from tire_strategy.models import cross_validate_compound
+
+    rng = np.random.default_rng(2)
+    X = _feature_frame(180)
+    X["year"] = 2024
+    X["round"] = rng.integers(1, 7, len(X))
+    X["label_pit"] = 1  # all rows are pit-laps for this test
+    X["label_compound"] = X["compound"]  # learnable target
+
+    result = cross_validate_compound(X, n_splits=3)
+    assert {"accuracy_mean", "macro_f1_mean", "baseline_accuracy_mean", "n_pits"} <= set(result)
+    assert 0.0 <= result["macro_f1_mean"] <= 1.0
+    assert result["n_pits"] == len(X)
