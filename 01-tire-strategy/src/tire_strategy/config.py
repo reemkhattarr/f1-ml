@@ -11,10 +11,17 @@ from pathlib import Path
 
 import fastf1
 
+# Global seed for reproducible splits, model training and any sampling.
+SEED: int = 42
+
 # Project root = .../01-tire-strategy (two parents up from this file's package).
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 DATA_DIR: Path = PROJECT_ROOT / "data"
 CACHE_DIR: Path = DATA_DIR / "cache"
+
+# Model artifacts and the local MLflow tracking store (both gitignored).
+ARTIFACTS_DIR: Path = PROJECT_ROOT / "artifacts"
+MLFLOW_DIR: Path = PROJECT_ROOT / "mlflow"
 
 
 def enable_cache(cache_dir: Path = CACHE_DIR) -> Path:

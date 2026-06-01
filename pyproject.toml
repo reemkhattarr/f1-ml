@@ -40,6 +40,10 @@ src = ["src", "tests"]
 # A deliberately broad, modern ruleset: pycodestyle/pyflakes, isort, pyupgrade,
 # flake8-bugbear, comprehensions, simplify, naming, and pandas-vet.
 select = ["E", "F", "I", "UP", "B", "C4", "SIM", "N", "PD", "RUF"]
+ignore = [
+    "N803",  # allow capital `X` for feature matrices (sklearn convention)
+    "N806",  # allow capital `X`/`y` as local variables (sklearn convention)
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["tire_strategy"]
