@@ -39,6 +39,7 @@ def _synthetic_bundle() -> ModelBundle:
             "flag_yellow": rng.integers(0, 2, 120).astype(bool),
             "used_second_compound": rng.integers(0, 2, 120).astype(bool),
             "rainfall": np.zeros(120, dtype=bool),
+            "sc_just_deployed": rng.integers(0, 2, 120).astype(bool),
         }
     )
     pit = build_pit_pipeline(scale_pos_weight=2.0, n_estimators=30).fit(

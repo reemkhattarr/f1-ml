@@ -62,6 +62,7 @@ def _synthetic_features(n: int = 120) -> pd.DataFrame:
             "flag_yellow": rng.integers(0, 2, n).astype(bool),
             "used_second_compound": rng.integers(0, 2, n).astype(bool),
             "rainfall": np.zeros(n, dtype=bool),
+            "sc_just_deployed": rng.integers(0, 2, n).astype(bool),
         }
     )
     assert set(FEATURE_COLUMNS).issubset(df.columns)
