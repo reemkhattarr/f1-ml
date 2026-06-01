@@ -19,6 +19,21 @@ Everything keys off the FastF1 on-disk cache (`data/cache/`), so re-runs only
 download what is genuinely new — a post-weekend refresh is fast, a cold rebuild is
 slow but resumable (an interrupted run continues from the cache).
 
+### FastF1 rate limit (why the explorer backfill is incremental)
+
+FastF1's data API allows **~500 calls/hour**. A normal post-weekend refresh is well
+under that, but a *cold* explorer rebuild — every session (FP/Q/Sprint/R) of every
+weekend since 2018 — needs far more, so it cannot complete in one run. The builder
+is therefore **resumable and rate-limit-aware**:
+
+- it **skips** any `(year, round, session)` already in the output, and
+- when the hourly limit is hit it **saves all progress and stops cleanly** with a
+  log line, rather than dropping sessions silently.
+
+So `just refresh-explorer` is safe to run repeatedly: each run adds roughly an
+hour's worth of new sessions and the coverage fills in over a few runs (or let the
+scheduled job below do it). Existing race data is preserved across runs.
+
 ```bash
 # After a race weekend, from the repo root:
 just refresh-all      # update data, retrain, rebuild both Space bundles
