@@ -42,6 +42,10 @@ check: lint types test
 data *SEASONS:
     uv run python -m tire_strategy.data.dataset {{SEASONS}}
 
+# Build the clean stint-laps dataset for the simulator (Project 1.2).
+stint-data:
+    uv run python -m tire_strategy.simulator.data
+
 # Tune the pit-head hyperparameters (Optuna) -> artifacts/best_params.json.
 tune *ARGS:
     uv run python -m tire_strategy.models.cv {{ARGS}}
