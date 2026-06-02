@@ -6,21 +6,21 @@ decision a race engineer would make:
 1. **Pit head** — will this car pit soon? (a calibrated probability)
 2. **Compound head** — if it pits, onto which slick compound (SOFT / MEDIUM / HARD)?
 
-Built entirely on free, public F1 timing data (**FastF1**) for 2022–2024, the
+Built entirely on free, public F1 timing data (**FastF1**) for 2022–2025, the
 current ground-effect regulation era. The goal is *production ML thinking* on real,
 messy sequential data: honest labels, leak-free features, calibrated uncertainty,
 a strategically-meaningful metric, trustworthy evaluation, and a deployable service
 + demo.
 
-## Headline result (5-fold grouped CV across all 68 races)
+## Headline result (5-fold grouped CV across all 92 races)
 
 | Metric | Model | "Never pit" | Rule-based |
 |---|---|---|---|
-| Asymmetric strategic cost ↓ | **0.317 ± 0.033** | 0.462 | 0.450 |
-| Average precision (pit head) | **0.335** | — | — |
-| Compound accuracy / macro-F1 | **0.668 / 0.62** | 0.526 | — |
+| Asymmetric strategic cost ↓ | **0.312 ± 0.010** | 0.457 | 0.441 |
+| Average precision (pit head) | **0.354** | — | — |
+| Compound accuracy / macro-F1 | **0.659 / 0.626** | 0.505 | — |
 
-The model beats both baselines by ~27–31% on cost, and the win **holds across every
+The model beats both baselines by ~29–32% on cost, and the win **holds across every
 cost ratio from 2:1 to 10:1** — it is not an artifact of one assumption.
 
 ## What makes it credible (not just "a model")
@@ -41,10 +41,11 @@ cost ratio from 2:1 to 10:1** — it is not an artifact of one assumption.
 ## Pipeline
 
 ```
-FastF1 → ingest → labels → leak-safe features → dataset (74,601 laps)
+f1_foundation.ingest → labels → leak-safe features → dataset (~176k laps, 2018-2026;
+       trains on the 2022-2025 ground-effect era)
        → race-atomic temporal / grouped-CV split
        → LightGBM pit head (scale_pos_weight + isotonic calibration + cost threshold)
-       + LightGBM compound head (slicks only, balanced)
+       + LightGBM compound head (slicks only, balanced, team-aware) + rain gate
        → evaluate vs baselines (MLflow) → FastAPI service → Gradio demo
 ```
 
@@ -53,29 +54,35 @@ FastF1 → ingest → labels → leak-safe features → dataset (74,601 laps)
 ```bash
 brew install libomp            # macOS: LightGBM's OpenMP runtime (one-time)
 just install                   # uv sync the workspace
-just data                      # build the 2022-2024 dataset from FastF1 (cached)
+just data                      # build the dataset from FastF1 (cached); trains on 2022-2025
 just train                     # train + evaluate + log to MLflow + save artifacts
 just serve                     # FastAPI at http://localhost:8000 (docs at /docs)
 just demo                      # interactive Gradio demo
-just check                     # ruff + pyright + pytest (33 tests)
+just check                     # ruff + pyright + pytest (46 tests)
 ```
 
-Other recipes: `just tune` (Optuna), `just mlflow-ui`, `just fmt`.
+Other recipes: `just tune` (Optuna), `just mlflow-ui`, `just fmt`, `just experiment <name>`.
 
 ## Repository structure
 
+This project depends on the shared **`f1_foundation`** package (`00-data-explorer`)
+for raw FastF1 ingestion and the shared cache/data directory.
+
 ```
 src/tire_strategy/
-├── config.py            # paths, seed, FastF1 cache
-├── data/                # ingest, labels, features, dataset assembly
+├── config.py            # re-exports the shared paths from f1_foundation; adds project paths
+├── data/                # labels, features, dataset assembly (ingest lives in f1_foundation)
 ├── models/              # split, metrics, baselines, pipeline, cv (+ Optuna)
+├── simulator/           # pit-loss vs degradation race simulator
+├── experiments.py       # the persistent experiment log (-> experiments/RESULTS.md)
 ├── evaluate.py          # metrics + diagnostic plots
 ├── train.py             # orchestrates train + eval + MLflow + artifacts
-└── serving/             # FastAPI app + Gradio demo + model loader
+└── serving/             # FastAPI app + Gradio demo + rain gate + model loader
 docs/
 ├── DESIGN.md            # the up-front data/labelling contract
 ├── IMPLEMENTATION.md    # the complete retrospective (every decision + experiment)
-└── DEPLOY.md            # hosting guide (HF Spaces / Render)
+├── DEPLOY.md            # hosting guide (HF Spaces / Render)
+└── DATA_UPDATES.md      # keeping data fresh (manual / cron / GitHub Actions)
 ```
 
 ## Documentation

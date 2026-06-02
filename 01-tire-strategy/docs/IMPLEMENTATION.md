@@ -232,10 +232,11 @@ plots + `metadata.json`. Loads tuned params from `configs/best_params.json` if p
 **Source:** FastF1 `session.laps`, `session.weather_data`, `session.results`, and
 the per-lap `TrackStatus`. The cache is mandatory and lives in `data/cache/`.
 
-**Scope:** 2022–2024, all circuits. **Measured dataset: 74,601 laps, 68 races**
-(2022: 22, 2023: 22, 2024: 24 rounds), 25 circuits. Building it cold hits FastF1's
-**500-calls/hour** rate limit (the first attempt got 32/68 races before throttling;
-re-running after the window reset completed all 68 — cached races make no API calls).
+**Scope:** the model trains on the **2022–2025 ground-effect era (92 races)**; the
+full ingested dataset spans **2018–2026 (~176k laps)** so the demo can browse every
+season (2026 is a new regulation era and is *browsable but excluded from training* —
+§12 #15). Building it cold hits FastF1's **500-calls/hour** rate limit, so the build
+is incremental and resumable (cached races make no API calls).
 
 **Gap reconstruction:** FastF1 exposes no gap column. For each lap we order cars by
 classified `Position` and take the difference of their line-crossing session `Time`
@@ -375,25 +376,25 @@ compound for the compound head.
 
 - **Average Precision (AP / PR-AUC)** — area under the precision-recall curve.
   Range [0, 1]; a random model scores ≈ the positive rate (here ≈0.097 for the
-  window target). **Ours ≈0.335 (grouped CV)** ≈ 3.4× the random floor. 1.0 is
+  window target). **Ours ≈0.354 (grouped CV)** ≈ 3.6× the random floor. 1.0 is
   perfect; the *practical* ceiling is unknown and bounded by imitation-label noise
   (real teams are themselves inconsistent), so we do not claim a specific
   "achievable best".
 - **ROC-AUC** — probability the model ranks a random pit-lap above a random
-  stay-lap. 0.5 = random, 1.0 = perfect. **Ours ≈0.79** = good discrimination.
+  stay-lap. 0.5 = random, 1.0 = perfect. **Ours ≈0.83** (late-2025 holdout).
 - **Recall (sensitivity)** — of actual positives, the fraction caught.
-  **Ours ≈0.68** (temporal). 1.0 = catches every pit.
-- **Precision** — of predicted positives, the fraction correct. **Ours ≈0.21**
+  **Ours ≈0.69** (temporal). 1.0 = catches every pit.
+- **Precision** — of predicted positives, the fraction correct. **Ours ≈0.24**
   (temporal) — deliberately low: positives are rare and the asymmetric cost favours
   catching pits (recall) over avoiding false alarms.
 - **Asymmetric strategic cost** — mean per-decision cost: a missed pit costs
   `cost_fn` (default 5), a spurious pit costs `cost_fp` (default 1), correct calls
   cost 0. **Lower is better; 0 is perfect.** "Never pit" costs `cost_fn × positive
-  rate`. **Ours ≈0.317 vs 0.462** for never-pit (grouped CV, 5:1).
+  rate`. **Ours ≈0.312 vs 0.457** for never-pit (grouped CV, 5:1).
 - **Macro-F1 (compound)** — unweighted mean of per-class F1, so SOFT/MEDIUM/HARD
-  count equally despite imbalance. Range [0, 1]. **Ours ≈0.62.**
-- **Accuracy (compound)** — fraction of correct compound predictions. **Ours ≈0.668
-  vs 0.526** most-frequent. (Accuracy is deliberately **absent** from the pit head —
+  count equally despite imbalance. Range [0, 1]. **Ours ≈0.63.**
+- **Accuracy (compound)** — fraction of correct compound predictions. **Ours ≈0.659
+  vs 0.505** most-frequent. (Accuracy is deliberately **absent** from the pit head —
   under ~97% stay-out it is meaningless.)
 - **Calibration** — a predicted probability *p* should occur with frequency *p*;
   inspected via the reliability curve (`pit_calibration.png`).
@@ -598,7 +599,7 @@ a rescaling of it).
 - **Imitation ceiling.** We predict what teams *did*, inheriting their mistakes. The
   fix is the deferred Project 1.5 simulator (counterfactual "optimal" labels).
 - **Compound head depends on hidden information** — remaining tyre sets, the planned
-  strategy, track position — that public data does not expose. 0.668 acc / 0.62
+  strategy, track position — that public data does not expose. 0.659 acc / 0.63
   macro-F1 may be near the achievable ceiling for this feature set.
 - **Gaps are approximate** (line-crossing order; lapped traffic → NaN). Rival-gap
   *dynamics* were tested and added nothing (§12.11).
@@ -607,7 +608,7 @@ a rescaling of it).
 - **The cost ratio is a domain choice**, mitigated by the robustness sweep (§11).
 - **The temporal test slice is small and noisy** — which is exactly why the grouped
   CV is the headline.
-- **Precision is low (~0.21)** by design (recall-favouring); a deployment would pick
+- **Precision is low (~0.24)** by design (recall-favouring); a deployment would pick
   the threshold from the real operating cost.
 
 ---
@@ -617,7 +618,7 @@ a rescaling of it).
 ```bash
 brew install libomp            # macOS: LightGBM's OpenMP runtime
 just install                   # uv sync the workspace
-just data                      # build the 2022-2024 dataset (FastF1, cached)
+just data                      # build the dataset (FastF1, cached); trains on 2022-2025
 just tune                      # optional: re-run Optuna -> configs/best_params.json
 just train                     # train + evaluate + log to MLflow + save artifacts
 just mlflow-ui                 # browse experiments

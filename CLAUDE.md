@@ -13,32 +13,51 @@ The repo lives at: `/Users/reemkhattar/Desktop/jj/f1-ml`
 ## Repo structure
 
 ```
-f1-ml-portfolio/
+f1-ml/                               (uv workspace root; one shared uv.lock)
 ├── CLAUDE.md                        (this file)
 ├── README.md                        (portfolio landing page)
+├── pyproject.toml                   (virtual workspace coordinator + shared tooling config)
+├── justfile                         (reproducible commands — NOT a Makefile)
+├── .github/workflows/               (CI: data refresh + explorer backfill)
+├── data/                            (gitignored, SHARED: FastF1 cache + all processed parquets)
+├── 00-data-explorer/                (shared data FOUNDATION — package f1_foundation)
 ├── 01-tire-strategy/
 ├── 02-lap-anomaly-detection/
 ├── 03-race-outcome-prediction/
-├── 04-driving-style-clustering/
+└── 04-driving-style-clustering/
 ```
 
-Each project folder follows this internal structure:
+`00-data-explorer` is the shared foundation every project builds on (FastF1
+ingestion + the data explorer + the shared cache/data config). The dependency
+arrow is always `01–04 → 00`, never back. Each project member follows:
 
 ```
-01-tire-strategy/
-├── README.md
-├── requirements.txt
-├── data/                            (gitignored, populated by data scripts)
+00-data-explorer/                    (package f1_foundation)
+├── pyproject.toml                   (its own deps; a workspace member)
+├── src/f1_foundation/
+│   ├── config.py                    (SEED + the SHARED FastF1 cache and data/ paths)
+│   ├── ingest.py                    (raw FastF1 → clean per-lap tables)
+│   ├── explorer.py / explorer_data.py   (the data explorer + all-sessions builder)
+├── deploy/                          (explorer HF Space build/deploy + backfill workflow)
+└── tests/
+
+01-tire-strategy/                    (package tire_strategy; depends on f1_foundation)
+├── pyproject.toml
 ├── notebooks/                       (exploration only, not production code)
-├── src/
-│   ├── data/                        (ingestion, cleaning, feature engineering)
-│   ├── models/                      (training, evaluation, serialization)
-│   ├── serving/                     (FastAPI app where applicable)
-│   └── utils/
-├── tests/
-├── mlflow/                          (gitignored, local MLflow tracking)
-└── Makefile                         (commands: install, data, train, serve, test)
+├── src/tire_strategy/
+│   ├── config.py                    (re-exports shared paths from f1_foundation; adds project paths)
+│   ├── data/                        (labels, features, dataset — strategy-specific)
+│   ├── models/                      (pipelines, CV, metrics, baselines)
+│   ├── serving/                     (FastAPI app + Gradio demo)
+│   └── simulator/                   (pit-loss vs degradation race simulator)
+├── tests/  ·  docs/  ·  deploy/  ·  experiments/  ·  configs/
+├── artifacts/                       (gitignored, trained models + plots)
+└── mlflow/                          (gitignored, local MLflow tracking)
 ```
+
+Commands live in the root `justfile` (`just install/data/train/serve/demo/test/check/...`).
+Data and artifacts are gitignored; the FastF1 cache and **all** processed parquets
+live once in the shared top-level `data/`.
 
 ## Tech stack — always use these, do not deviate unless there is a strong reason
 
@@ -129,7 +148,7 @@ When writing model training code, always include: a seed for reproducibility, a 
 
 When writing FastAPI code, always include: input validation with Pydantic, proper HTTP status codes, a health check endpoint, and at least one test in pytest.
 
-When writing data ingestion code with FastF1, always cache sessions locally using `fastf1.Cache.enable_cache('data/cache')`. FastF1 makes HTTP requests to the F1 timing API and caching is essential to avoid hitting rate limits and to make development fast.
+When writing data ingestion code with FastF1, always enable the shared on-disk cache first via `f1_foundation.enable_cache()` (it points at the shared top-level `data/cache`). FastF1 makes HTTP requests to the F1 timing API and is rate-limited to ~500 calls/hour, so caching is essential to avoid hitting the limit and to make development fast. Raw ingestion (`load_race`, `load_results`) lives in `f1_foundation` — projects import it, they do not re-implement it.
 
 Do not write notebooks for anything that will be part of the final codebase. Notebooks go in `notebooks/` and are for exploration only. Production code goes in `src/`.
 
@@ -143,18 +162,41 @@ Manage dependencies with uv: `uv add <pkg>` inside the relevant workspace member
 
 ## Current state
 
-_Last updated: 2026-06-01._
+_Last updated: 2026-06-02._
 
-**Foundation complete.** The repo is a working uv workspace:
-- `pyproject.toml` (root) — virtual workspace coordinator; shared dev toolchain (ruff, pyright, pytest, pre-commit, mlflow, dvc); shared ruff/pyright/pytest config.
-- `.python-version` (3.11), `.gitignore`, `justfile` (install/lint/fmt/types/test/check/hooks), `.pre-commit-config.yaml`.
-- `01-tire-strategy/` is the first workspace member: own `pyproject.toml` (fastf1, pandas, numpy, scikit-learn, lightgbm, matplotlib, mlflow), `src/tire_strategy/` package with `config.py` (FastF1 cache helper), `tests/`, `data/` (gitignored).
-- `uv sync --all-packages` succeeds; FastF1 verified by loading Monza 2024 R (1008 laps, 20 drivers, compounds + stint/tyre-life present).
-- Not yet committed to git (no commits on `main` yet); Docker/Terraform/CI/DVC deferred per ML-first plan.
+**00 — Data foundation & explorer: COMPLETE and live.** Extracted into its own
+workspace member `00-data-explorer` (package `f1_foundation`): raw FastF1 ingestion
+(`load_race`/`load_results`), the shared FastF1 cache + top-level `data/`, and the
+**F1 Data Explorer** (a Gradio app that browses every field of every dataset — all
+session types FP/Q/Sprint/R, weather, results, lap timing). Live on Hugging Face.
+An hourly, rate-limit-aware GitHub Actions workflow backfills the all-sessions data
+in the cloud (resumable; ~300k+ lap rows and growing).
 
-**Next:** begin Project 1 (Tire Strategy) — design the data ingestion across 2022–2024, then the feature pipeline. Projects 02–04 are not yet scaffolded; add each as a workspace member when started.
+**01 — Tire Strategy: COMPLETE end-to-end and live.** Data (2018–2026 ingested;
+trained on the 2022–2025 ground-effect era, holdout 2025), a decomposed two-head
+model (calibrated pit-timing head + slick compound head, with a track-temp-aware
+rain gate for wet stops), grouped-CV evaluation with an asymmetric strategic-cost
+metric, MLflow tracking, a persistent experiment log (`experiments/RESULTS.md`),
+a FastAPI service, a pit-loss-vs-degradation race simulator, and a Gradio demo
+(strategy timeline, results panel, auto race notes) — all live on Hugging Face.
+Headline (5-fold grouped CV): pit cost **0.312** vs 0.46 never-pit; compound acc
+**0.659**. See `01-tire-strategy/docs/IMPLEMENTATION.md` for the full retrospective.
 
-### Decisions made (session 2026-06-01)
-- Repo layout: single uv-workspace **monorepo**; a portfolio-site layer + per-project demos sit on top later. Each project stays independently runnable/demoable.
-- Infra: **ML-first** — build models/pipelines first, layer Docker/Terraform/CI/DVC as each project matures.
-- Tooling overrides applied: uv (not pip), just (not Make), ruff format (not black). See the Tech stack section.
+**Tooling/infra in place:** uv workspace (one `uv.lock`), ruff + pyright + pytest
+all green, pre-commit, the root `justfile`, and **two GitHub Actions workflows**
+(weekly model refresh + the explorer backfill). Docker/Terraform/DVC still deferred
+per the ML-first plan.
+
+**Next:** Project **02 — Lap-Time Anomaly Detection** (PyTorch LSTM autoencoder on
+telemetry). Add it as a workspace member depending on `f1_foundation`; new project
+parquets written to the shared `data/processed/` appear in the explorer automatically.
+
+### Decisions made
+- Repo layout: single uv-workspace **monorepo**; `00-data-explorer`/`f1_foundation`
+  is the shared foundation (`01–04 → 00`). Each project stays independently demoable.
+- Training era boundary is **2022+** (ground-effect regs); pre-2022 and the new-reg
+  **2026** season measurably hurt, so both are excluded from training (2026 is
+  browsable in the demo only). Every feature/data change is adopted only on a
+  measured CV win — see the experiment log.
+- Infra: **ML-first** — models/pipelines first, layer Docker/Terraform/DVC later.
+- Tooling overrides: uv (not pip), just (not Make), ruff format (not black).
