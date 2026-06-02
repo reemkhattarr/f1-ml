@@ -28,6 +28,11 @@ class RaceState(BaseModel):
     air_temp: float = Field(description="Air temperature (deg C).")
     compound: Compound = Field(description="Current tyre compound.")
     circuit: str = Field(min_length=1, description="Circuit name, e.g. 'Monza'.")
+    team: str = Field(
+        default="UNKNOWN",
+        description="Constructor, e.g. 'Ferrari'. Optional — used only by the "
+        "compound head; an unknown team degrades gracefully to the other features.",
+    )
 
     # --- flags (default to a clean, green-flag, fresh-tyre state) ---
     fresh_tyre: bool = True
@@ -63,6 +68,7 @@ class RaceState(BaseModel):
                     "air_temp": 33.0,
                     "compound": "MEDIUM",
                     "circuit": "Monza",
+                    "team": "Ferrari",
                     "gap_ahead_s": 2.9,
                     "gap_behind_s": 1.0,
                     "last_clean_lap_time_s": 85.5,

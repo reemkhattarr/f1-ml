@@ -31,7 +31,7 @@ and the committed `experiments/RESULTS.md`. The headline result:
 |---|---|---|---|
 | Asymmetric strategic cost (lower better) | **0.312 ± 0.010** | 0.457 | 0.441 |
 | Average precision (pit head) | **0.354** | — | — |
-| Compound accuracy / macro-F1 | **0.649 / 0.62** | 0.505 (most-frequent) | — |
+| Compound accuracy / macro-F1 | **0.659 / 0.626** | 0.505 (most-frequent) | — |
 
 The model beats both baselines by ~29–32% on cost, and the win holds across every
 cost ratio from 2:1 to 10:1 (see §11). The production split trains on 2022–2024 and
@@ -488,8 +488,13 @@ a rescaling of it).
     within noise, fold std slightly worse). **Compound head:** a small but consistent
     gain — accuracy 0.6492 → 0.6588 (+1.0pp), macro-F1 0.6166 → 0.6263 (+1.0pp).
     Reading: *when* to pit is driven by tyre/race state, not team identity, but *which
-    compound* is mildly team-flavoured (constructor tyre preferences). A candidate to
-    adopt into the compound head only, pending a per-fold consistency check.
+    compound* is mildly team-flavoured (constructor tyre preferences). **Adopted into
+    the compound head only** — a per-fold check confirmed accuracy improves in **5/5
+    folds** (macro-F1 4/5). `team` is carried in the dataset and added to
+    `COMPOUND_FEATURES`; the pit head stays on `DEFAULT_FEATURES`, so its metrics are
+    byte-identical (verified). Serving adds an optional `team` field (defaults to
+    `UNKNOWN`, handled by `OneHotEncoder(handle_unknown="ignore")`, so old callers and
+    unseen teams degrade gracefully).
 17. **Cost-ratio robustness (`experiments cost-ratio`, grouped CV 2022–2025):** the
     model beats both baselines at **every** missed:spurious ratio from 2:1 to 10:1
     (e.g. 5:1 → model 0.322 vs never-pit 0.457 vs rule 0.441; 10:1 → 0.499 vs 0.913

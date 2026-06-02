@@ -22,6 +22,11 @@ htmlcov/
 # FastF1 cache and all raw/processed data live outside git.
 **/data/
 !**/data/.gitkeep
+# ...but NOT the `data` source *package* (src/<pkg>/data/) — that is code.
+!**/src/**/data/
+!**/src/**/data/**
+# keep bytecode caches out even inside the re-included source package
+**/__pycache__/
 **/mlflow/
 **/artifacts/
 **/space_build/
