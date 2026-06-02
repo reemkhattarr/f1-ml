@@ -5,6 +5,7 @@ from tire_strategy.models.cv import (
     cost_ratio_sweep,
     cross_validate_compound,
     cross_validate_pit,
+    evaluate_wet_gate,
     tune_pit,
 )
 from tire_strategy.models.metrics import asymmetric_pit_cost, pit_cost_matrix
@@ -33,6 +34,7 @@ __all__ = [
     "cost_ratio_sweep",
     "cross_validate_compound",
     "cross_validate_pit",
+    "evaluate_wet_gate",
     "pit_cost_matrix",
     "race_group_key",
     "tune_pit",

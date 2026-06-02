@@ -41,6 +41,7 @@ from tire_strategy.models import (
     build_pit_pipeline,
     cross_validate_compound,
     cross_validate_pit,
+    evaluate_wet_gate,
 )
 from tire_strategy.models.baselines import MostFrequentCompound
 from tire_strategy.models.metrics import asymmetric_pit_cost, best_cost_threshold
@@ -124,6 +125,10 @@ def train() -> dict:
         mlflow.log_metrics({f"cv_{k}": v for k, v in cv["agg"].items()})
         cv_comp = cross_validate_compound(cv_df, n_splits=5, features=COMPOUND_FEATURES)
         mlflow.log_metrics({f"cv_compound_{k}": v for k, v in cv_comp.items()})
+        # Wet regime is handled by a deterministic rain gate (slick head is dry-only);
+        # report its honest accuracy on rainy pits, INTERMEDIATE/WET collapsed.
+        wet_gate = evaluate_wet_gate(cv_df)
+        mlflow.log_metrics({f"wet_gate_{k}": v for k, v in wet_gate.items()})
 
         # --- Pit head: fit on train, calibrate on val (deployment-style holdout) ---
         logger.info("Fitting pit head (scale_pos_weight=%.2f) ...", scale_pos_weight)
@@ -170,6 +175,7 @@ def train() -> dict:
             **{f"cv_{k}": v for k, v in cv["agg"].items()},
             **baseline_costs,
             **{f"cv_compound_{k}": v for k, v in cv_comp.items()},
+            **{f"wet_gate_{k}": v for k, v in wet_gate.items()},
             "compound_accuracy": compound_acc,
             "compound_baseline_accuracy": compound_base_acc,
             "compound_n_test": float(len(comp_test)),

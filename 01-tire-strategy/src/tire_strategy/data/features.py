@@ -37,6 +37,26 @@ FUEL_S_PER_LAP = 0.055
 # wet-weather tyre changes (INTERMEDIATE/WET) are driven by rain, not strategy.
 SLICK_COMPOUNDS: tuple[str, ...] = ("SOFT", "MEDIUM", "HARD")
 
+# Wet-weather tyres. The compound head deliberately does NOT model these. In the
+# wet the tyre choice is not a strategic slick decision but a rule (raining -> fit
+# a wet tyre), handled by a deterministic rain gate at serving time (see
+# serving/recommend.py). We cannot learn inter-vs-full-wet either: that split is
+# decided by standing water / rain intensity, which our boolean ``rainfall``
+# feature cannot express, and full WET appears at only ~13 strategic stops across
+# 2018-2026 (vs ~327 INTERMEDIATE). So the gate defaults to INTERMEDIATE.
+WET_COMPOUNDS: tuple[str, ...] = ("INTERMEDIATE", "WET")
+DEFAULT_WET_COMPOUND: str = "INTERMEDIATE"
+
+# Track temperature (deg C) below which a rainy pit is treated as a genuine wet
+# stop (-> INTERMEDIATE); at or above it the rain is more likely light/drying and
+# teams fit slicks, so the gate defers to the slick head. Track temp is the single
+# strongest *available* discriminator of wet-vs-slick at a rainy pit (warm track
+# sheds water): adding it lifts the gate's wet-regime accuracy ~0.61 -> ~0.70
+# (leak-free nested CV) and halves its variance — measured, see docs §9.2 / §12 #20.
+# A documented domain constant: accuracy is flat across ~24-28 C, so 26 is not a
+# load-bearing knife-edge (cf. FUEL_S_PER_LAP).
+WET_TRACK_TEMP_C: float = 26.0
+
 NUMERIC_FEATURES: list[str] = [
     "lap_number",
     "laps_remaining",

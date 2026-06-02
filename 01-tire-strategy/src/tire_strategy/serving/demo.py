@@ -18,6 +18,7 @@ import pandas as pd
 from tire_strategy.config import DATA_DIR
 from tire_strategy.data import load_dataset
 from tire_strategy.serving.models import ModelBundle, load_bundle
+from tire_strategy.serving.recommend import recommend_compound
 
 plt.switch_backend("Agg")
 
@@ -122,15 +123,18 @@ def lap_prediction(bundle: ModelBundle, year: int, circuit: str, driver: str, la
         return {}
 
     pit_proba = float(bundle.pit_model.predict_proba(row)[0, 1])
-    compound_proba = bundle.compound_model.predict_proba(row)[0]
-    classes = [str(c) for c in bundle.compound_model.classes_]
-    recommended_compound = classes[int(compound_proba.argmax())]
+    rainfall = bool(row["rainfall"].fillna(False).astype(bool).iloc[0])
+    track_temp = float(row["track_temp"].iloc[0])
+    compound = recommend_compound(
+        bundle.compound_model, row, rainfall=rainfall, track_temp=track_temp
+    )
     actual_compound = row["label_compound"].iloc[0]
 
     return {
         "pit_probability": pit_proba,
         "pit_recommended": pit_proba >= bundle.threshold,
-        "recommended_compound": recommended_compound,
+        "recommended_compound": compound.compound,
+        "compound_source": compound.source,
         "actual_pit": bool(row["label_pit"].iloc[0] == 1),
         "actual_compound": None if pd.isna(actual_compound) else str(actual_compound),
         "compound": str(row["compound"].iloc[0]),
@@ -223,10 +227,11 @@ def _format(pred: dict) -> str:
         return "_No data for this lap._"
     rec = "🟢 **PIT**" if pred["pit_recommended"] else "⚪ **STAY OUT**"
     actual = f"pitted for **{pred['actual_compound']}**" if pred["actual_pit"] else "stayed out"
+    compound_note = " _(rain rule)_" if pred.get("compound_source") == "wet-rule" else ""
     return (
         f"### Model: {rec}  (p = {pred['pit_probability']:.2f})\n"
         f"- On **{pred['compound']}**, tyre age **{pred['tyre_age']}** laps\n"
-        f"- If pitting, recommended compound: **{pred['recommended_compound']}**\n\n"
+        f"- If pitting, recommended compound: **{pred['recommended_compound']}**{compound_note}\n\n"
         f"### Actually: the team **{actual}**"
     )
 

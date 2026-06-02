@@ -14,6 +14,7 @@ import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException
 
 from tire_strategy.serving.models import ModelBundle, load_bundle
+from tire_strategy.serving.recommend import recommend_compound
 from tire_strategy.serving.schemas import HealthResponse, PredictionResponse, RaceState
 
 app = FastAPI(
@@ -54,17 +55,15 @@ def predict(state: RaceState, bundle: ModelBundle = Depends(get_bundle)) -> Pred
     features = pd.DataFrame([state.model_dump()])
 
     pit_probability = float(bundle.pit_model.predict_proba(features)[0, 1])
-    compound_proba = bundle.compound_model.predict_proba(features)[0]
-    classes = [str(c) for c in bundle.compound_model.classes_]
-    compound_probabilities = {
-        cls: float(prob) for cls, prob in zip(classes, compound_proba, strict=True)
-    }
-    recommended_compound = max(compound_probabilities, key=lambda c: compound_probabilities[c])
+    compound = recommend_compound(
+        bundle.compound_model, features, rainfall=state.rainfall, track_temp=state.track_temp
+    )
 
     return PredictionResponse(
         pit_probability=pit_probability,
         pit_recommended=pit_probability >= bundle.threshold,
         decision_threshold=bundle.threshold,
-        recommended_compound=recommended_compound,
-        compound_probabilities=compound_probabilities,
+        recommended_compound=compound.compound,
+        compound_probabilities=compound.probabilities,
+        compound_source=compound.source,
     )

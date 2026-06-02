@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from tire_strategy.data.features import FEATURE_COLUMNS, SLICK_COMPOUNDS
+from tire_strategy.data.features import DEFAULT_WET_COMPOUND, FEATURE_COLUMNS, SLICK_COMPOUNDS
 from tire_strategy.models import build_compound_pipeline, build_pit_pipeline
 from tire_strategy.serving.app import app, get_bundle
 from tire_strategy.serving.models import ModelBundle
@@ -97,11 +97,35 @@ def test_predict_returns_valid_recommendation(client: TestClient) -> None:
     body = resp.json()
     assert 0.0 <= body["pit_probability"] <= 1.0
     assert isinstance(body["pit_recommended"], bool)
+    assert body["compound_source"] == "model"
     assert body["recommended_compound"] in set(SLICK_COMPOUNDS)
     assert set(body["compound_probabilities"]) == set(SLICK_COMPOUNDS)
     assert body["compound_probabilities"][body["recommended_compound"]] == max(
         body["compound_probabilities"].values()
     )
+
+
+def test_predict_gates_to_wet_tyre_on_cool_rainy_track(client: TestClient) -> None:
+    """Raining + cool track -> rule-based wet tyre, regardless of the slick head."""
+    resp = client.post("/predict", json={**_VALID_STATE, "rainfall": True, "track_temp": 18.0})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["compound_source"] == "wet-rule"
+    assert body["recommended_compound"] == DEFAULT_WET_COMPOUND
+    assert body["recommended_compound"] not in set(SLICK_COMPOUNDS)
+    assert body["compound_probabilities"] == {DEFAULT_WET_COMPOUND: 1.0}
+    # pit timing is unaffected by the gate — Head 1 still runs as normal.
+    assert 0.0 <= body["pit_probability"] <= 1.0
+
+
+def test_predict_defers_to_slick_head_on_warm_rainy_track(client: TestClient) -> None:
+    """Raining but warm track (likely light/drying) -> defer to the slick head."""
+    resp = client.post("/predict", json={**_VALID_STATE, "rainfall": True, "track_temp": 40.0})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["compound_source"] == "model"
+    assert body["recommended_compound"] in set(SLICK_COMPOUNDS)
+    assert set(body["compound_probabilities"]) == set(SLICK_COMPOUNDS)
 
 
 def test_predict_rejects_invalid_input(client: TestClient) -> None:

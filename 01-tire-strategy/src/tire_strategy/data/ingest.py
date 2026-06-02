@@ -115,14 +115,29 @@ def load_race(year: int, grand_prix: int | str, session_id: str = "R") -> pd.Dat
             out[dst] = _seconds(cast(pd.Series, laps[src]))
 
     # --- weather (FastF1 aligns each lap to the nearest weather sample) ---
+    # track_temp + rainfall drive the strategy model (track temp is the strongest
+    # wet-vs-slick discriminator; see docs §9.2). humidity / wind / pressure carry
+    # no measured signal for the wet decision but are cheap to keep here for future
+    # use; they are not in the feature set, so the model simply ignores them.
     if weather is not None:
         out["air_temp"] = weather["AirTemp"].astype(float)
         out["track_temp"] = weather["TrackTemp"].astype(float)
         out["rainfall"] = weather["Rainfall"].astype("boolean")
+        out["humidity"] = weather["Humidity"].astype(float)
+        out["pressure"] = weather["Pressure"].astype(float)
+        out["wind_speed"] = weather["WindSpeed"].astype(float)
+        out["wind_direction"] = weather["WindDirection"].astype(float)
     else:
-        out["air_temp"] = pd.NA
-        out["track_temp"] = pd.NA
-        out["rainfall"] = pd.NA
+        for col in (
+            "air_temp",
+            "track_temp",
+            "rainfall",
+            "humidity",
+            "pressure",
+            "wind_speed",
+            "wind_direction",
+        ):
+            out[col] = pd.NA
 
     # --- pit flags ---
     out["is_in_lap"] = laps["PitInTime"].notna()
@@ -133,9 +148,9 @@ def load_race(year: int, grand_prix: int | str, session_id: str = "R") -> pd.Dat
     out["track_status"] = status
     out["flag_yellow"] = status.map(_contains(_YELLOW)).astype("boolean")
     out["flag_sc"] = status.map(_contains(_SC)).astype("boolean")
-    out["flag_vsc"] = (
-        status.map(_contains(_VSC)) | status.map(_contains(_VSC_ENDING))
-    ).astype("boolean")
+    out["flag_vsc"] = (status.map(_contains(_VSC)) | status.map(_contains(_VSC_ENDING))).astype(
+        "boolean"
+    )
     out["flag_red"] = status.map(_contains(_RED)).astype("boolean")
     out["under_caution"] = (out["flag_sc"] | out["flag_vsc"]).astype("boolean")
 
@@ -165,9 +180,7 @@ def load_results(year: int, grand_prix: int | str, session_id: str = "R") -> pd.
     out["driver"] = results["Abbreviation"].astype("string")
     out["status"] = results["Status"].astype("string")
     out["classified_position"] = results["ClassifiedPosition"].astype("string")
-    out["classified"] = (
-        out["classified_position"].str.fullmatch(r"\d+").fillna(False).astype(bool)
-    )
+    out["classified"] = out["classified_position"].str.fullmatch(r"\d+").fillna(False).astype(bool)
     out["finish_position"] = cast(
         pd.Series, pd.to_numeric(results["Position"], errors="coerce")
     ).astype("Int64")
