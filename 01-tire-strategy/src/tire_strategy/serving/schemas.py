@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from tire_strategy.serving.recommend import CompoundSource
+
 Compound = Literal["SOFT", "MEDIUM", "HARD", "INTERMEDIATE", "WET"]
 
 
@@ -88,7 +90,14 @@ class PredictionResponse(BaseModel):
     decision_threshold: float = Field(description="Cost-optimised threshold used.")
     recommended_compound: str = Field(description="Most likely compound if pitting.")
     compound_probabilities: dict[str, float] = Field(
-        description="Probability per slick compound (conditional on pitting)."
+        description="Probability per compound if pitting. Slick classes "
+        "(SOFT/MEDIUM/HARD) from the ML head in the dry; a single wet tyre at "
+        "probability 1.0 when the rain gate fires."
+    )
+    compound_source: CompoundSource = Field(
+        description="How the compound was chosen: 'model' (slick ML head, dry) or "
+        "'wet-rule' (deterministic rain gate — wet-tyre choice is not learnable "
+        "from the available features)."
     )
 
 
