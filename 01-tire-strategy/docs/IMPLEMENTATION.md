@@ -482,6 +482,13 @@ a rescaling of it).
       Adding 2025 is a measured net win for the pit head; pre-2022 data (different
       tyres/regulations, sparse 2020) adds noise to the compound head. Recommend
       expanding the production split to train 2022–2024 / hold out 2025. **Shipped.**
+    - *2026 update (measured):* adding the 2026 races to the training pool **hurts**
+      (grouped CV AP 0.350 → 0.338, compound acc 0.659 → 0.640, cost std 2.5× noisier).
+      2026 is a **new regulation era** (new power units / active aero), so it is to
+      2022–2025 what pre-2022 is — a different distribution. **2026 is therefore kept
+      out of training** (the model stays on 2022–2025) but **is browsable in the demo**;
+      it will get its own era boundary once it has enough complete races. This is the
+      guardrail working as intended — we measured before changing the model, and didn't.
 16. **Team / constructor feature (`experiments team-feature`, grouped CV 2022–2025):**
     do teams follow learnable strategy patterns? Added `team` as a categorical to
     both heads. **Pit head:** negligible (cost 0.3224 → 0.3222, AP 0.3479 → 0.3499 —

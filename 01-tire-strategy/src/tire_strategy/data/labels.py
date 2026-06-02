@@ -43,9 +43,7 @@ def add_pit_and_compound_labels(laps: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_train_eligibility(
-    laps: pd.DataFrame, retired: set[str] | None = None
-) -> pd.DataFrame:
+def add_train_eligibility(laps: pd.DataFrame, retired: set[str] | None = None) -> pd.DataFrame:
     """Flag rows that are not honest strategy decisions.
 
     Excluded:
@@ -63,7 +61,10 @@ def add_train_eligibility(
         df.loc[mask, "train_eligible"] = False
         df.loc[mask, "exclude_reason"] = reason
 
-    _exclude(df["is_in_lap"].astype(bool) & df["flag_red"].fillna(False).astype(bool), "red_flag_change")
+    _exclude(
+        df["is_in_lap"].astype(bool) & df["flag_red"].fillna(False).astype(bool),
+        "red_flag_change",
+    )
 
     if retired:
         last_lap = df.groupby("driver")["lap_number"].transform("max")

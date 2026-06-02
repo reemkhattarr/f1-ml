@@ -49,7 +49,7 @@ def build_one(season: int, race: int | str) -> pd.DataFrame | None:
     try:
         labelled = load_labelled_race(season, race)
         return build_features(labelled)
-    except Exception as exc:  # noqa: BLE001 - one bad race must not abort the build
+    except Exception as exc:  # one bad race must not abort the whole build
         logger.warning("Skipping %s round %s: %s", season, race, exc)
         return None
 
@@ -115,8 +115,7 @@ def update_dataset(
     have: set[tuple[int, int]] = set()
     if existing is not None:
         have = {
-            (int(y), int(r))
-            for y, r in existing[["year", "round"]].drop_duplicates().to_numpy()
+            (int(y), int(r)) for y, r in existing[["year", "round"]].drop_duplicates().to_numpy()
         }
 
     new_frames: list[pd.DataFrame] = []

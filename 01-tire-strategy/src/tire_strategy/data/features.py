@@ -169,17 +169,17 @@ def _add_pace_features(df: pd.DataFrame, window: int = _DEG_WINDOW) -> pd.DataFr
             if len(xs) >= 2:
                 x = xs[-window:]
                 y = ys[-window:]
-                slope.at[idx] = float(np.polyfit(x, y, 1)[0])
+                slope.loc[idx] = float(np.polyfit(x, y, 1)[0])
             is_usable = (
-                bool(grp.at[idx, "_clean"])
-                and pd.notna(grp.at[idx, "tyre_life"])
-                and pd.notna(grp.at[idx, "laps_remaining"])
+                bool(grp.loc[idx, "_clean"])
+                and pd.notna(grp.loc[idx, "tyre_life"])
+                and pd.notna(grp.loc[idx, "laps_remaining"])
             )
             if is_usable:
-                corrected = float(grp.at[idx, "lap_time_s"]) - FUEL_S_PER_LAP * float(
-                    grp.at[idx, "laps_remaining"]
+                corrected = float(grp.loc[idx, "lap_time_s"]) - FUEL_S_PER_LAP * float(
+                    grp.loc[idx, "laps_remaining"]
                 )
-                xs.append(float(grp.at[idx, "tyre_life"]))
+                xs.append(float(grp.loc[idx, "tyre_life"]))
                 ys.append(corrected)
     df["deg_slope_s_per_lap"] = slope
     return df.drop(columns=["_clean_lt", "_clean", "_rel"])
