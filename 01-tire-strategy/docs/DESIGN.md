@@ -89,9 +89,10 @@ Absolute Pirelli C0–C5 enrichment is a later option.
 
 ## 6. Data scope
 
-- **Seasons 2022–2024, all circuits** — the current ground-effect regulation era
+- **Seasons 2022–2025, all circuits** — the current ground-effect regulation era
   with consistent Pirelli allocation, so degradation behaves comparably. Pre-2022
-  would mix car/tyre regulations.
+  (and the new-regulation 2026) would mix car/tyre regulations, so they are excluded
+  from training (the full 2018–2026 data is ingested for the demo/explorer only).
 - Volume ≈ 70 races × 20 drivers × ~55 laps ≈ **~700k lap rows**.
 - Source: FastF1 `session.laps`, `session.weather_data`, track status / race
   control messages. FastF1 cache is mandatory (`tire_strategy.config.enable_cache`).
