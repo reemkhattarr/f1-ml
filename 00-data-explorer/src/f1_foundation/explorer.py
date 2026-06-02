@@ -1,8 +1,13 @@
-"""Gradio data explorer: browse every field in the project's F1 data.
+"""Gradio data explorer: browse every field in the portfolio's F1 data.
 
 Organised into logical tabs (lap timing, strategy/model data, weather, results,
 telemetry, stints), each with sensible filters and a clean, readable table.
 Read-only browsing of the FastF1 data behind the portfolio.
+
+Lives in the shared foundation: it browses the raw FastF1 data it builds itself
+(lap timing / weather / results) plus any project parquet present in the shared
+processed-data directory — referenced by conventional filename, never by importing
+project code, so the foundation stays dependency-free of the projects.
 """
 
 from __future__ import annotations
@@ -14,10 +19,14 @@ from typing import cast
 
 import pandas as pd
 
-from tire_strategy.data.dataset import DATASET_PATH
-from tire_strategy.data.telemetry import TELEMETRY_PATH
-from tire_strategy.serving.explorer_data import RAW_LAPS_PATH, RESULTS_PATH, WEATHER_PATH
-from tire_strategy.simulator.data import STINT_PATH
+from f1_foundation.config import PROCESSED_DIR
+from f1_foundation.explorer_data import RAW_LAPS_PATH, RESULTS_PATH, WEATHER_PATH
+
+# Project parquets are referenced by their conventional filename in the shared
+# processed dir; a section whose file is absent is simply hidden (see build_explorer).
+DATASET_PATH = PROCESSED_DIR / "tire_strategy_dataset.parquet"
+TELEMETRY_PATH = PROCESSED_DIR / "telemetry_features.parquet"
+STINT_PATH = PROCESSED_DIR / "stint_laps.parquet"
 
 _ALL = "All"
 

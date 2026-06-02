@@ -14,10 +14,10 @@ from typing import cast
 
 import pandas as pd
 
+from f1_foundation import load_race
 from tire_strategy.config import DATA_DIR, enable_cache
 from tire_strategy.data.dataset import iter_calendar
 from tire_strategy.data.features import SLICK_COMPOUNDS
-from tire_strategy.data.ingest import load_race
 
 logger = logging.getLogger(__name__)
 

@@ -2,8 +2,8 @@
 
 import sys
 
-sys.path.insert(0, "01-tire-strategy/src")
+sys.path.insert(0, "00-data-explorer/src")
 
-from tire_strategy.serving.explorer import build_explorer
+from f1_foundation.explorer import build_explorer
 
 build_explorer().launch()

@@ -1,25 +1,29 @@
-"""Project paths and FastF1 cache setup.
+"""Project paths and FastF1 cache setup for tire-strategy.
 
-FastF1 hits the live F1 timing API; a local on-disk cache is mandatory to avoid
-rate limits and to keep development fast and reproducible. Every entry point
-that loads F1 data should call :func:`enable_cache` first.
+The FastF1 cache and the processed-data directory are **shared across the whole
+portfolio** and owned by :mod:`f1_foundation.config`; this module re-exports them
+so existing ``from tire_strategy.config import DATA_DIR`` imports keep working,
+and adds the paths that are specific to *this* project (artifacts, MLflow, tuned
+configs). Every entry point that loads F1 data should call :func:`enable_cache`.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import fastf1
-
-# Global seed for reproducible splits, model training and any sampling.
-SEED: int = 42
+# Shared, portfolio-wide (single FastF1 cache + one processed-data dir).
+from f1_foundation.config import (
+    CACHE_DIR,
+    DATA_DIR,
+    PROCESSED_DIR,
+    SEED,
+    enable_cache,
+)
 
 # Project root = .../01-tire-strategy (two parents up from this file's package).
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
-DATA_DIR: Path = PROJECT_ROOT / "data"
-CACHE_DIR: Path = DATA_DIR / "cache"
 
-# Model artifacts and the local MLflow tracking store (both gitignored).
+# Project-specific, gitignored outputs.
 ARTIFACTS_DIR: Path = PROJECT_ROOT / "artifacts"
 MLFLOW_DIR: Path = PROJECT_ROOT / "mlflow"
 
@@ -28,12 +32,15 @@ MLFLOW_DIR: Path = PROJECT_ROOT / "mlflow"
 CONFIGS_DIR: Path = PROJECT_ROOT / "configs"
 TUNED_PARAMS_PATH: Path = CONFIGS_DIR / "best_params.json"
 
-
-def enable_cache(cache_dir: Path = CACHE_DIR) -> Path:
-    """Enable the FastF1 on-disk cache, creating the directory if needed.
-
-    Returns the resolved cache directory so callers can log it.
-    """
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    fastf1.Cache.enable_cache(str(cache_dir))
-    return cache_dir
+__all__ = [
+    "ARTIFACTS_DIR",
+    "CACHE_DIR",
+    "CONFIGS_DIR",
+    "DATA_DIR",
+    "MLFLOW_DIR",
+    "PROCESSED_DIR",
+    "PROJECT_ROOT",
+    "SEED",
+    "TUNED_PARAMS_PATH",
+    "enable_cache",
+]

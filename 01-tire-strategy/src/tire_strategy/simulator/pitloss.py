@@ -18,9 +18,9 @@ from typing import cast
 import numpy as np
 import pandas as pd
 
+from f1_foundation import load_race
 from tire_strategy.config import DATA_DIR, enable_cache
 from tire_strategy.data.dataset import iter_calendar
-from tire_strategy.data.ingest import load_race
 
 PITLOSS_PATH: Path = DATA_DIR / "processed" / "pit_losses.json"
 DEFAULT_PIT_LOSS = 22.0  # seconds — fallback for circuits without an estimate

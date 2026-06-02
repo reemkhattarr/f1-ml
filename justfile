@@ -67,17 +67,17 @@ deploy-demo:
 
 # Launch the data explorer locally (browse all dataset fields).
 explorer:
-    uv run python -m tire_strategy.serving.explorer
+    uv run python -m f1_foundation.explorer
 
 # Build + push the data-explorer Space to Hugging Face.
 build-explorer-space:
-    uv run python 01-tire-strategy/deploy/build_explorer_space.py
+    uv run python 00-data-explorer/deploy/build_explorer_space.py
 deploy-explorer:
-    uv run hf upload reemkhattar/f1-data-explorer 01-tire-strategy/deploy/explorer_space_build . --repo-type space
+    uv run hf upload reemkhattar/f1-data-explorer 00-data-explorer/deploy/explorer_space_build . --repo-type space
 
 # Rebuild the explorer datasets (all sessions, all seasons) + explorer bundle.
 refresh-explorer:
-    uv run python -m tire_strategy.serving.explorer_data
+    uv run python -m f1_foundation.explorer_data
     just build-explorer-space
 
 # Full post-weekend refresh: model demo + explorer bundles (build only, no deploy).

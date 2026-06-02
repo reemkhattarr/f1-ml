@@ -44,7 +44,7 @@ jobs:
       - name: Cache FastF1 downloads
         uses: actions/cache@v4
         with:
-          path: 01-tire-strategy/data/cache
+          path: data/cache
           key: fastf1-cache-${{ github.run_id }}
           restore-keys: fastf1-cache-
 
@@ -64,20 +64,23 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          dest=01-tire-strategy/data/processed
+          dest=data/processed
           mkdir -p "$dest"
+          # The Space stores parquets at data/processed/ (new layout) or, before the
+          # 00-foundation migration, 01-tire-strategy/data/processed/. Try both so a
+          # resume never loses prior progress.
           for f in raw_laps weather results tire_strategy_dataset stint_laps telemetry_features; do
-            uv run hf download reemkhattar/f1-data-explorer \
-              "01-tire-strategy/data/processed/$f.parquet" --repo-type space \
-              --local-dir /tmp/space --token "$HF_TOKEN" >/dev/null 2>&1 || true
-            src="/tmp/space/01-tire-strategy/data/processed/$f.parquet"
-            [ -f "$src" ] && cp "$src" "$dest/" && echo "resumed $f.parquet"
+            for sp in "data/processed/$f.parquet" "01-tire-strategy/data/processed/$f.parquet"; do
+              uv run hf download reemkhattar/f1-data-explorer "$sp" --repo-type space \
+                --local-dir /tmp/space --token "$HF_TOKEN" >/dev/null 2>&1 || true
+              if [ -f "/tmp/space/$sp" ]; then cp "/tmp/space/$sp" "$dest/"; echo "resumed $f.parquet"; break; fi
+            done
           done
 
       - name: Run one backfill batch (resumable, halts on rate limit)
         id: batch
         run: |
-          out="$(uv run python -m tire_strategy.serving.explorer_data 2>&1)"
+          out="$(uv run python -m f1_foundation.explorer_data 2>&1)"
           echo "$out" | grep -E "Added|rate limit|Wrote" || true
           added="$(echo "$out" | grep -oE 'Added [0-9]+ new' | grep -oE '[0-9]+' | head -1)"
           echo "added=${added:-0}" >> "$GITHUB_OUTPUT"
@@ -87,9 +90,9 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          uv run python 01-tire-strategy/deploy/build_explorer_space.py
+          uv run python 00-data-explorer/deploy/build_explorer_space.py
           uv run hf upload reemkhattar/f1-data-explorer \
-            01-tire-strategy/deploy/explorer_space_build . --repo-type space --token "$HF_TOKEN"
+            00-data-explorer/deploy/explorer_space_build . --repo-type space --token "$HF_TOKEN"
 
       - name: Coverage complete?
         if: steps.batch.outputs.added == '0'

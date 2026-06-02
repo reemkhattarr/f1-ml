@@ -1,5 +1,6 @@
 """Data layer for the tire-strategy project: ingestion, labelling, features."""
 
+from f1_foundation import load_race, load_results, retired_drivers
 from tire_strategy.data.dataset import build_dataset, load_dataset
 from tire_strategy.data.features import (
     CATEGORICAL_FEATURES,
@@ -8,7 +9,6 @@ from tire_strategy.data.features import (
     SLICK_COMPOUNDS,
     build_features,
 )
-from tire_strategy.data.ingest import load_race, load_results, retired_drivers
 from tire_strategy.data.labels import build_labels, load_labelled_race
 
 __all__ = [

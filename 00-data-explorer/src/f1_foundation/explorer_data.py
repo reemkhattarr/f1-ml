@@ -14,8 +14,8 @@ The build is **resumable**: FastF1's on-disk cache persists every download, so a
 interrupted run continues cheaply (cached sessions re-read instantly). Each session
 is loaded defensively — a missing/unavailable session is skipped, never fatal.
 
-    uv run python -m tire_strategy.serving.explorer_data            # all seasons
-    uv run python -m tire_strategy.serving.explorer_data 2025 2026  # only these
+    uv run python -m f1_foundation.explorer_data            # all seasons
+    uv run python -m f1_foundation.explorer_data 2025 2026  # only these
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ import fastf1
 import pandas as pd
 from fastf1.exceptions import RateLimitExceededError
 
-from tire_strategy.config import DATA_DIR, enable_cache
+from f1_foundation.config import DATA_DIR, enable_cache
 
 logger = logging.getLogger(__name__)
 

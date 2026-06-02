@@ -15,7 +15,7 @@ from typing import cast
 import fastf1
 import pandas as pd
 
-from tire_strategy.config import enable_cache
+from f1_foundation.config import enable_cache
 
 # FastF1 encodes track status per lap as a string of concatenated single-digit
 # codes (e.g. "14" means codes 1 and 4 both occurred during that lap).

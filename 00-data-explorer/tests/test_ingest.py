@@ -10,8 +10,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from tire_strategy.data import load_race
-from tire_strategy.data.ingest import _contains, _seconds
+from f1_foundation.ingest import _contains, _seconds, load_race
 
 
 def test_contains_detects_concatenated_track_status_codes() -> None:
