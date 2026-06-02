@@ -94,3 +94,23 @@ Trigger a one-off run anytime from the Actions tab ("Run workflow").
 > Note: a cold all-sessions rebuild is heavy for a free CI runner. In practice the
 > scheduled job should run the **incremental** model refresh (fast); a full
 > explorer rebuild is best run locally and committed, or pointed at a cache.
+
+### Cloud backfill of the explorer (one-time)
+
+[`.github/workflows/backfill-explorer.yml`](../../.github/workflows/backfill-explorer.yml)
+completes the all-sessions explorer coverage **entirely in the cloud** — your
+machine can be off. Because FastF1 caps at ~500 calls/hour, each scheduled run:
+
+1. pulls the current parquets from the Space (the resume point),
+2. adds **one** rate-limited batch of new sessions, then
+3. redeploys the Space — but **only if** it actually added data, so completed runs
+   are cheap no-ops.
+
+**Cost:** free. The repo is private, so GitHub Actions gives 2,000 minutes/month;
+a handful of ~15-minute backfill runs is a small fraction of that.
+
+**Setup:** add the `HF_TOKEN` secret (as above) and enable the workflow.
+
+> ⚠️ This is a **temporary** backfill. Once a run logs `Added 0 new` (full
+> coverage), **comment out the `schedule:` block** so the hourly runs stop — an
+> always-on hourly cron would otherwise slowly eat the free Actions minutes.

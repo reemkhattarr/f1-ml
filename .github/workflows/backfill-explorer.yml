@@ -1,0 +1,96 @@
+name: Backfill explorer (all sessions)
+
+# One-time, cloud-driven backfill of the F1 Data Explorer to *all* session types
+# (FP/Q/Sprint/R) for every season. FastF1 caps at ~500 calls/hour, so it runs in
+# hourly batches: each run pulls the current parquets from the Space, adds one
+# rate-limited batch of new sessions, and redeploys — until coverage is complete.
+#
+# Setup: add an `HF_TOKEN` repo secret (a Hugging Face write token) under
+# Settings -> Secrets and variables -> Actions. Then enable the schedule below.
+#
+# IMPORTANT: this is a *temporary* backfill. Once the explorer shows full coverage
+# (a run logs "Added 0 new"), DISABLE it by commenting out the `schedule:` block —
+# otherwise the hourly runs keep consuming GitHub Actions minutes for nothing.
+#
+# See 01-tire-strategy/docs/DATA_UPDATES.md.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "7 * * * *" # hourly, until you disable it (see note above)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backfill-explorer
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Cache FastF1 downloads
+        uses: actions/cache@v4
+        with:
+          path: 01-tire-strategy/data/cache
+          key: fastf1-cache-${{ github.run_id }}
+          restore-keys: fastf1-cache-
+
+      - name: Sync dependencies
+        run: uv sync --all-packages
+
+      - name: Require HF_TOKEN
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::HF_TOKEN secret not set — see docs/DATA_UPDATES.md."
+            exit 1
+          fi
+
+      - name: Pull current parquets from the Space (resume point)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          dest=01-tire-strategy/data/processed
+          mkdir -p "$dest"
+          for f in raw_laps weather results tire_strategy_dataset stint_laps telemetry_features; do
+            uv run hf download reemkhattar/f1-data-explorer \
+              "01-tire-strategy/data/processed/$f.parquet" --repo-type space \
+              --local-dir /tmp/space --token "$HF_TOKEN" >/dev/null 2>&1 || true
+            src="/tmp/space/01-tire-strategy/data/processed/$f.parquet"
+            [ -f "$src" ] && cp "$src" "$dest/" && echo "resumed $f.parquet"
+          done
+
+      - name: Run one backfill batch (resumable, halts on rate limit)
+        id: batch
+        run: |
+          out="$(uv run python -m tire_strategy.serving.explorer_data 2>&1)"
+          echo "$out" | grep -E "Added|rate limit|Wrote" || true
+          added="$(echo "$out" | grep -oE 'Added [0-9]+ new' | grep -oE '[0-9]+' | head -1)"
+          echo "added=${added:-0}" >> "$GITHUB_OUTPUT"
+
+      - name: Build + redeploy the explorer Space (only if new sessions were added)
+        if: steps.batch.outputs.added != '0'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          uv run python 01-tire-strategy/deploy/build_explorer_space.py
+          uv run hf upload reemkhattar/f1-data-explorer \
+            01-tire-strategy/deploy/explorer_space_build . --repo-type space --token "$HF_TOKEN"
+
+      - name: Coverage complete?
+        if: steps.batch.outputs.added == '0'
+        run: echo "::notice::No new sessions — backfill looks complete. Disable the schedule in this workflow."
