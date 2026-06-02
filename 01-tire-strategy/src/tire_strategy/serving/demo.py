@@ -124,10 +124,7 @@ def lap_prediction(bundle: ModelBundle, year: int, circuit: str, driver: str, la
 
     pit_proba = float(bundle.pit_model.predict_proba(row)[0, 1])
     rainfall = bool(row["rainfall"].fillna(False).astype(bool).iloc[0])
-    track_temp = float(row["track_temp"].iloc[0])
-    compound = recommend_compound(
-        bundle.compound_model, row, rainfall=rainfall, track_temp=track_temp
-    )
+    compound = recommend_compound(bundle.compound_model, row, rainfall=rainfall)
     actual_compound = row["label_compound"].iloc[0]
 
     return {

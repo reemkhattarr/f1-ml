@@ -221,7 +221,7 @@ degradation slope**). Exposes `NUMERIC_FEATURES`, `CATEGORICAL_FEATURES`,
 
 ### 4.12 `train.py`
 Orchestrates everything: temporal split → grouped-CV (the trustworthy headline) →
-fit pit head → **isotonic-calibrate on validation** → cost-minimising threshold →
+fit pit head → **isotonic-calibrate on validation** → F1-maximising threshold →
 compound head → evaluate vs baselines → MLflow logging → save model artifacts +
 plots + `metadata.json`. Loads tuned params from `configs/best_params.json` if present.
 
@@ -342,27 +342,28 @@ macro-F1 0.60 → 0.62, accuracy 0.655 → 0.668).
 
 **Serving rain gate.** Because the head is slick-only, calling it in the wet would
 return a slick recommendation in the rain. So `serving/recommend.py` gates the
-compound on `rainfall` **and track temperature**: on a rainy pit it recommends the
-rule-based wet tyre (`INTERMEDIATE`) only when the track is **cool** (`track_temp <
-WET_TRACK_TEMP_C`, 26 °C); when it is warm-and-raining (likely a light shower or a
-drying track) it defers to the slick head, as it does in the dry. The response
-carries `compound_source ∈ {"model", "wet-rule"}` so callers see which path decided.
+compound on `rainfall`: **raining → `INTERMEDIATE`** (rule), dry → slick head. The
+response carries `compound_source ∈ {"model", "wet-rule"}` so callers see which path
+decided.
 
-The wet branch is **a rule, not ML, on measured grounds** (§12 #20): ML with
-`rainfall` as a feature was tried two ways and neither reliably beat the rule — a
-4-class head scored *worse* on the wet subset (0.524 vs 0.610) and dented the dry
-head; a binary wet-vs-slick model's apparent gain sat inside a ±0.175 fold std. But
-the rule is **not** flat "always INTERMEDIATE": **track temperature** is the
-strongest *available* wet-vs-slick discriminator (a warm track sheds water → slicks
-viable; a cool track holds it → inters). Adding that one factor lifts the gate's
-wet-regime accuracy **0.587 → 0.706** on 378 rainy pits (leak-free nested CV ≈0.70,
-robust across 24–28 °C, variance roughly halved). `evaluate_wet_gate` logs both
-(`wet_gate_gate_accuracy` vs `wet_gate_flat_gate_accuracy`) plus the **0.413**
-slick-fit rate. INTERMEDIATE and WET are collapsed (full `WET` is unpredictable —
-~13 stops, and inter-vs-full-wet needs rain intensity / standing water we lack). The
-*timing* of the wet↔dry switch (rain onset, dry-out crossback) lives on the pit
-head's rain-state features (§12 #18–19), not here; track-drying time is unobservable
-in public data, so no drying-rate model is attempted.
+The wet branch is **a rule, not ML, on measured grounds** (§12 #20). ML with
+`rainfall` as a feature was tried two ways and neither reliably beat the rule. A
+**track-temperature** refinement (predict slicks on a warm-but-raining pit) *looked*
+strong on the pooled 2018–2025 data (0.587 → 0.706) — but that win came entirely
+from the older tyre era; on the **2022–2025 regulation era we actually train/serve
+on it was net-negative** (0.656 vs **0.742** for the flat rule, because modern teams
+fit wets at ~74 % of rainy pits). Evaluating on the pooled population rather than the
+deployment era was the trap; corrected to the flat gate. `evaluate_wet_gate` logs
+`wet_gate_gate_accuracy` (= the wet-fit rate, **0.74** on the production split) and
+`slick_fit_rate`. INTERMEDIATE and WET are collapsed (full `WET` is unpredictable —
+~13 stops, and inter-vs-full-wet needs rain intensity / standing water we lack).
+
+Crucially the gate only chooses the *compound given a pit*; **whether/when to pit is
+the pit-timing head's job** — it is rain-aware and trained on a 3-lap window, so the
+lap or two teams wait after rain starts is absorbed and the gate never forces a
+premature wet stop. The *timing* of the wet↔dry switch (rain onset, dry-out
+crossback) lives on that head's rain features (§12 #18–19), not here; track-drying
+time is unobservable in public data, so no drying-rate model is attempted.
 
 ### 9.3 Baselines
 "Never pit" (majority) and a rule-based strategy for the pit head; most-frequent
@@ -561,21 +562,30 @@ a rescaling of it).
     extra two-stage machinery. **Reading:** the variable that truly decides slick-vs-wet
     is rain *intensity* / standing water, absent from our (boolean `rainfall`) features;
     with ~12 wet races the proxy signal can't beat a majority-class rule with any
-    stability. **Kept a deterministic gate** — but not a *flat* one. **Track temperature
-    refinement (measured):** of the available features, `track_temp` is the strongest
-    wet-vs-slick discriminator at a rainy pit (slick-fits averaged 29 °C, wet-fits 24 °C
-    — a warm track sheds water). A rule "fit INTERMEDIATE only when raining *and*
-    `track_temp < 26 °C`, else defer to the slick head" lifts wet-regime accuracy
-    **0.587 → 0.706** (whole set) / **≈0.70 ±0.19** under *leak-free nested CV* (cutoff
-    chosen on train races, scored on unseen races; folds converged on 25–26.5 °C), and
-    **every** cutoff in 24–32 °C beats flat-INTER (0.65–0.73) — a broad, physically
-    grounded effect, not a tuned knife-edge — with the fold variance roughly halved
-    (0.27 → ~0.15–0.19). This is why a *rule* using one strong feature beats the ML
-    models here: on ~360 race-clustered points a single hard threshold is more stable
-    than a many-feature classifier. `evaluate_wet_gate` reports `gate_accuracy` (the
-    track-temp rule), `flat_gate_accuracy` (the old always-INTER baseline), and the
-    **0.413** slick-fit rate. INTERMEDIATE and WET are collapsed (full WET is
+    stability. **Kept a flat deterministic gate: raining → INTERMEDIATE.**
+    **Track-temperature refinement — tried, and rejected on a population-shift lesson.**
+    `track_temp` looked like the strongest available discriminator (slick-fits averaged
+    29 °C, wet-fits 24 °C — a warm track sheds water), and a rule "INTER only when
+    raining *and* `track_temp < 26 °C`, else slick head" lifted wet-regime accuracy
+    **0.587 → 0.706** under leak-free nested CV — *on the pooled 2018–2025 data*. But the
+    model is trained/served on the **2022–2025 regulation era only** (2018–21 use
+    different cars/Pirelli compounds and aren't in training). Re-scored on that
+    deployment population the refinement is **net-negative: 0.656 vs 0.742 for the flat
+    rule** (modern teams fit wets at ~74 % of rainy pits, so "always INTER" is already
+    strong and the warm-rain→slick calls mostly lose). The 0.706 win lived entirely in
+    the old era. **Lesson:** evaluate on the deployment population, not a pooled
+    multi-era set — a classic distribution-shift trap. Reverted to the flat gate.
+    `evaluate_wet_gate` reports `gate_accuracy` (= wet-fit rate, ~0.74 on the production
+    split) and `slick_fit_rate`. INTERMEDIATE and WET are collapsed (full WET is
     unpredictable, ~13 stops; inter-vs-full-wet needs intensity data we lack).
+21. **Pit-timing threshold: cost-optimal → F1-optimal (validation-tuned).** The
+    operating threshold was switched from minimising asymmetric cost to maximising F1 on
+    the validation split — the honest "predict correctly" objective for a ~7.5 %-positive
+    target (plain accuracy is maximised by *never* pitting: ~92.5 % accurate, ~10 % recall,
+    useless). Chosen threshold **0.190** (val F1 0.379), vs the old 0.14; raises test
+    accuracy ~0.81 → 0.84 and precision while keeping recall ~0.64. Asymmetric cost is
+    barely changed (0.283), and AP/ROC-AUC are threshold-independent (0.286 / 0.832).
+    `best_f1_threshold` lives in `metrics.py`; `pit_val_f1` / `pit_val_cost` are logged.
 
 **Other things tried and discarded along the way:** the MLflow file store (deprecated
 → switched to SQLite); `black` (superseded by `ruff format`); `CalibratedClassifierCV(cv="prefit")`

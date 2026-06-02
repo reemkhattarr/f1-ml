@@ -44,7 +44,7 @@ from tire_strategy.models import (
     evaluate_wet_gate,
 )
 from tire_strategy.models.baselines import MostFrequentCompound
-from tire_strategy.models.metrics import asymmetric_pit_cost, best_cost_threshold
+from tire_strategy.models.metrics import asymmetric_pit_cost, best_f1_threshold, expected_pit_cost
 from tire_strategy.models.pipeline import COMPOUND_FEATURES
 
 logger = logging.getLogger(__name__)
@@ -141,8 +141,15 @@ def train() -> dict:
         calibrated.fit(val_df, y_val)
 
         proba_val = calibrated.predict_proba(val_df)[:, 1]
-        threshold, val_cost = best_cost_threshold(y_val, proba_val)
-        logger.info("Chosen pit threshold=%.3f (val cost=%.4f)", threshold, val_cost)
+        # Operating threshold maximises F1 on validation (the honest "predict
+        # correctly" objective for this imbalanced target — plain accuracy would
+        # pick a near-"never pit" threshold). We also log the asymmetric cost at
+        # that threshold for reference against the cost-minimising alternative.
+        threshold, val_f1 = best_f1_threshold(y_val, proba_val)
+        val_cost = expected_pit_cost(y_val, proba_val, threshold)
+        logger.info(
+            "Chosen pit threshold=%.3f (val F1=%.4f, val cost=%.4f)", threshold, val_f1, val_cost
+        )
 
         proba_test = calibrated.predict_proba(test_df)[:, 1]
         pit_test = pit_metrics(y_test, proba_test, threshold)
@@ -172,6 +179,8 @@ def train() -> dict:
         # --- Log metrics ---
         metrics = {
             **{f"pit_{k}": v for k, v in pit_test.items()},
+            "pit_val_f1": val_f1,
+            "pit_val_cost": val_cost,
             **{f"cv_{k}": v for k, v in cv["agg"].items()},
             **baseline_costs,
             **{f"cv_compound_{k}": v for k, v in cv_comp.items()},

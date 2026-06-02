@@ -6,23 +6,21 @@ wet, where the tyre choice is not a strategic slick trade-off but a rule: if it
 is raining, fit a wet-weather tyre. So at serving time we **gate** on rainfall
 rather than always calling the slick head.
 
-Why the wet branch is a rule rather than a second ML model: ML with ``rainfall``
-as a feature was tried two ways (a 4-class head; a binary wet-vs-slick model) and
-neither reliably beat the rule — the true discriminator is rain intensity /
-standing water, absent from our features, and with ~12 wet seasons the proxy
-signal can't beat a majority-class rule with stability (docs §12 #20).
+The gate is deterministic, not a second ML model, on measured grounds (§12 #20):
+ML with ``rainfall`` as a feature was tried two ways and neither reliably beat the
+rule. We also tested refining the rule with **track temperature** (predict slicks
+on a warm-but-raining pit). It looked good on the pooled 2018-2025 data (0.59 ->
+0.71) but that win came entirely from the older tyre era — on the **2022-2025
+regulation era we actually train/serve on, it was net-negative** (0.66 vs 0.74 for
+the flat rule, because modern teams fit wets at ~74% of rainy pits). So the gate is
+the flat rule: **raining -> INTERMEDIATE**. Full WET is never predicted (only ~13
+stops, and inter-vs-full-wet needs rain intensity we lack); WET is collapsed into
+INTERMEDIATE everywhere.
 
-The rule is **not** flat "always INTERMEDIATE", though. **Track temperature** is
-the strongest available wet-vs-slick discriminator at a rainy pit (a warm track
-sheds water, so the rain is light/drying and teams fit slicks; a cool track holds
-it). So the gate fits INTERMEDIATE only when it is raining *and* the track is cool
-(< ``WET_TRACK_TEMP_C``); on a warm-but-raining pit it defers to the slick head.
-This lifts wet-regime accuracy ~0.61 -> ~0.70 (leak-free nested CV) and halves the
-variance. Full WET is never predicted (only ~13 stops, and inter-vs-wet needs the
-intensity we lack); WET is collapsed into INTERMEDIATE everywhere.
-
-The *timing* of wet<->dry switches (rain onset, dry-out crossover) is a separate,
-learnable problem handled by the pit-timing head's rain features — not here.
+The gate only chooses the *compound* given a pit; **whether/when to pit is the
+pit-timing head's job** (rain-aware, and trained on a 3-lap window so the lap or
+two teams wait after rain starts is absorbed) — so the gate never forces a
+premature wet stop.
 """
 
 from __future__ import annotations
@@ -32,7 +30,7 @@ from typing import Any, Literal
 
 import pandas as pd
 
-from tire_strategy.data.features import DEFAULT_WET_COMPOUND, WET_TRACK_TEMP_C
+from tire_strategy.data.features import DEFAULT_WET_COMPOUND
 
 CompoundSource = Literal["model", "wet-rule"]
 
@@ -51,16 +49,15 @@ class CompoundRecommendation:
 
 
 def recommend_compound(
-    compound_model: Any, features: pd.DataFrame, *, rainfall: bool, track_temp: float
+    compound_model: Any, features: pd.DataFrame, *, rainfall: bool
 ) -> CompoundRecommendation:
-    """Recommend a compound for one race state, gating on rainfall + track temp.
+    """Recommend a compound for one race state, gating on rainfall.
 
-    On a cool-track rainy pit (``track_temp < WET_TRACK_TEMP_C``) return the
-    rule-based wet tyre (``DEFAULT_WET_COMPOUND``) at probability 1.0. Otherwise —
-    dry, or warm-and-raining (likely light/drying) — defer to the slick compound
-    head. ``features`` must be a single-row frame of the model's feature columns.
+    In the rain, return the rule-based wet tyre (``DEFAULT_WET_COMPOUND``) at
+    probability 1.0; otherwise defer to the slick compound head. ``features`` must
+    be a single-row frame of the model's feature columns.
     """
-    if rainfall and track_temp < WET_TRACK_TEMP_C:
+    if rainfall:
         return CompoundRecommendation(
             compound=DEFAULT_WET_COMPOUND,
             probabilities={DEFAULT_WET_COMPOUND: 1.0},

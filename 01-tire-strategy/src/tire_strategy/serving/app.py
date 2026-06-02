@@ -55,9 +55,7 @@ def predict(state: RaceState, bundle: ModelBundle = Depends(get_bundle)) -> Pred
     features = pd.DataFrame([state.model_dump()])
 
     pit_probability = float(bundle.pit_model.predict_proba(features)[0, 1])
-    compound = recommend_compound(
-        bundle.compound_model, features, rainfall=state.rainfall, track_temp=state.track_temp
-    )
+    compound = recommend_compound(bundle.compound_model, features, rainfall=state.rainfall)
 
     return PredictionResponse(
         pit_probability=pit_probability,

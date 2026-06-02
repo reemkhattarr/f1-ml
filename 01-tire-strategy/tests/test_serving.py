@@ -105,9 +105,10 @@ def test_predict_returns_valid_recommendation(client: TestClient) -> None:
     )
 
 
-def test_predict_gates_to_wet_tyre_on_cool_rainy_track(client: TestClient) -> None:
-    """Raining + cool track -> rule-based wet tyre, regardless of the slick head."""
-    resp = client.post("/predict", json={**_VALID_STATE, "rainfall": True, "track_temp": 18.0})
+def test_predict_gates_to_wet_tyre_in_the_rain(client: TestClient) -> None:
+    """When it is raining, the compound recommendation is the rule-based wet tyre,
+    not a slick from the ML head — regardless of what the slick head would say."""
+    resp = client.post("/predict", json={**_VALID_STATE, "rainfall": True})
     assert resp.status_code == 200
     body = resp.json()
     assert body["compound_source"] == "wet-rule"
@@ -118,9 +119,9 @@ def test_predict_gates_to_wet_tyre_on_cool_rainy_track(client: TestClient) -> No
     assert 0.0 <= body["pit_probability"] <= 1.0
 
 
-def test_predict_defers_to_slick_head_on_warm_rainy_track(client: TestClient) -> None:
-    """Raining but warm track (likely light/drying) -> defer to the slick head."""
-    resp = client.post("/predict", json={**_VALID_STATE, "rainfall": True, "track_temp": 40.0})
+def test_predict_uses_slick_head_when_dry(client: TestClient) -> None:
+    """No rain -> the slick compound head decides (source = model)."""
+    resp = client.post("/predict", json={**_VALID_STATE, "rainfall": False})
     assert resp.status_code == 200
     body = resp.json()
     assert body["compound_source"] == "model"
