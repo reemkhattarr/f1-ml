@@ -121,24 +121,20 @@ def test_cross_validate_compound_reports_macro_f1_and_baseline() -> None:
     assert result["n_pits"] == len(X)
 
 
-def test_evaluate_wet_gate_track_temp_rule_beats_flat() -> None:
+def test_evaluate_wet_gate_scores_rule_with_wet_collapsed() -> None:
     from tire_strategy.models import evaluate_wet_gate
 
-    # 4 rainy strategic pits, split by track temp exactly as the rule expects:
-    #   cool (<26C) -> fitted wet tyres;  warm -> fitted slicks (light/drying).
-    # The track-temp rule gets all 4 regimes right (1.0); the old flat "always
-    # INTER" rule only gets the 2 wet ones (0.5). Plus noise rows to be ignored:
-    # a dry pit and a rainy non-pit lap.
+    # 4 rainy strategic pits: 2 INTER + 1 WET (gate is right — both are "wet"),
+    # 1 SOFT (a light-rain / drying-track stop the flat gate gets wrong). Plus
+    # noise rows the gate must ignore: a dry pit, and a rainy non-pit lap.
     df = pd.DataFrame(
         {
             "label_pit": [1, 1, 1, 1, 1, 0],
             "rainfall": [True, True, True, True, False, True],
-            "track_temp": [18.0, 20.0, 35.0, 40.0, 42.0, 15.0],
-            "label_compound": ["INTERMEDIATE", "INTERMEDIATE", "SOFT", "HARD", "MEDIUM", "WET"],
+            "label_compound": ["INTERMEDIATE", "WET", "INTERMEDIATE", "SOFT", "HARD", "WET"],
         }
     )
     result = evaluate_wet_gate(df)
     assert result["n_rainy_pits"] == 4.0
-    assert result["flat_gate_accuracy"] == 0.5  # 2 of 4 rainy pits fitted a wet tyre
-    assert result["slick_fit_rate"] == 0.5
-    assert result["gate_accuracy"] == 1.0  # track-temp rule calls all 4 regimes right
+    assert result["gate_accuracy"] == 0.75  # 3 of 4 rainy pits fitted a wet tyre
+    assert result["slick_fit_rate"] == 0.25

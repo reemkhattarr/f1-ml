@@ -85,3 +85,31 @@ def best_cost_threshold(
     ]
     best = int(np.argmin(costs))
     return float(thresholds[best]), float(costs[best])
+
+
+def best_f1_threshold(
+    y_true: npt.ArrayLike,
+    pit_proba: npt.ArrayLike,
+    n_steps: int = 101,
+) -> tuple[float, float]:
+    """Grid-search the probability threshold maximising F1.
+
+    F1 (harmonic mean of precision and recall) is the right "predict correctly"
+    objective for this imbalanced target. Plain accuracy is maximised by *never*
+    pitting (~92% of laps are "stay out"), so it rewards a useless model; F1
+    instead balances catching real pit windows (recall) against false alarms
+    (precision). Returns ``(threshold, f1)``.
+    """
+    yt = np.asarray(y_true).astype(int)
+    proba = np.asarray(pit_proba, dtype=np.float64)
+    thresholds = np.linspace(0.0, 1.0, n_steps)
+    f1s: list[float] = []
+    for t in thresholds:
+        yp = (proba >= t).astype(int)
+        tp = float(((yt == 1) & (yp == 1)).sum())
+        fp = float(((yt == 0) & (yp == 1)).sum())
+        fn = float(((yt == 1) & (yp == 0)).sum())
+        denom = 2 * tp + fp + fn
+        f1s.append(2 * tp / denom if denom else 0.0)
+    best = int(np.argmax(f1s))
+    return float(thresholds[best]), float(f1s[best])

@@ -16,7 +16,7 @@ from sklearn.metrics import average_precision_score, f1_score
 from sklearn.model_selection import GroupKFold
 
 from tire_strategy.config import SEED
-from tire_strategy.data.features import SLICK_COMPOUNDS, WET_TRACK_TEMP_C
+from tire_strategy.data.features import SLICK_COMPOUNDS
 from tire_strategy.models.baselines import MajorityBaseline, RuleBasedBaseline
 from tire_strategy.models.metrics import (
     DEFAULT_COST_FN,
@@ -171,40 +171,30 @@ def cross_validate_compound(
 def evaluate_wet_gate(df: pd.DataFrame) -> dict:
     """Honest evaluation of the deterministic rain gate (serving/recommend.py).
 
-    The compound head is slick-only, so in the wet a *rule* picks the regime. The
-    rule is **track-temperature-aware**: on a rainy strategic pit it predicts a wet
-    tyre iff the track is cool (``track_temp < WET_TRACK_TEMP_C``); on a warm-but-
-    raining pit (likely light/drying) it predicts slick (defers to the slick head).
-    INTERMEDIATE and WET are collapsed into one wet class — we cannot distinguish
-    them (rain intensity, absent from our features; full WET is only ~13 stops).
+    The compound head is slick-only, so in the wet a *rule* decides: rainfall ->
+    fit INTERMEDIATE. INTERMEDIATE and WET are collapsed into one wet class (we
+    cannot distinguish them — that split is driven by rain intensity, absent from
+    our features; full WET is only ~13 stops). So on a rainy strategic pit the
+    gate predicts INTERMEDIATE and is "correct" iff a wet tyre was actually fitted.
 
-    Reported on all rainy strategic pits, wet/slick regime accuracy:
-    - ``gate_accuracy``    — the track-temp rule's accuracy (correct regime call).
-    - ``flat_gate_accuracy`` — the old "always INTERMEDIATE" rule, = the wet-fit
-      rate; the track-temp rule's lift over this is the win.
-    - ``slick_fit_rate``   — fraction of rainy pits that actually fitted slicks
-      (light-rain / drying stops), the irreducible-looking part a boolean misses.
-
-    **Measured (grouped CV, §12 #20):** ML with ``rainfall`` as a feature does *not*
-    reliably beat this rule. The track-temp factor itself lifts accuracy ~0.61 ->
-    ~0.70 (leak-free nested CV) and halves the variance, robustly across thresholds.
+    Its accuracy therefore equals the **wet-tyre fit rate** among rainy pits; the
+    complement (``slick_fit_rate``) is the honest caveat — light-rain and
+    drying-track stops where teams fit slicks despite the rainfall flag, which a
+    boolean cannot tell apart. **Measured (§12 #20):** neither ML with ``rainfall``
+    as a feature nor a track-temperature refinement reliably beats this flat rule
+    on the 2022-2025 era we train/serve on (the track-temp win was an artifact of
+    pooling the older tyre era), so the gate stays flat.
     """
     wet = ["INTERMEDIATE", "WET"]
     pits = cast(pd.DataFrame, df[(df["label_pit"] == 1) & df["label_compound"].notna()])
     rainy = pits[pits["rainfall"].fillna(False).astype(bool)]
     n = len(rainy)
     if not n:
-        keys = ("n_rainy_pits", "gate_accuracy", "flat_gate_accuracy", "slick_fit_rate")
-        return {k: float("nan") for k in keys}
+        return {k: float("nan") for k in ("n_rainy_pits", "gate_accuracy", "slick_fit_rate")}
     wet_fit = cast(pd.Series, rainy["label_compound"]).astype(str).isin(wet)
-    # Track-temp rule: predict wet when cool (NaN track temp -> default to wet).
-    track_temp = cast(pd.Series, rainy["track_temp"])
-    predict_wet = cast(pd.Series, track_temp.lt(WET_TRACK_TEMP_C) | track_temp.isna())
-    correct = cast(pd.Series, predict_wet == wet_fit)
     return {
         "n_rainy_pits": float(n),
-        "gate_accuracy": float(correct.mean()),
-        "flat_gate_accuracy": float(wet_fit.mean()),
+        "gate_accuracy": float(wet_fit.mean()),
         "slick_fit_rate": float((~wet_fit).mean()),
     }
 
