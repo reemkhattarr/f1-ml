@@ -13,8 +13,9 @@ dependencies = []
 package = false
 
 [tool.uv.workspace]
-# Members are added here as each project is scaffolded.
-members = ["01-tire-strategy"]
+# Members are added here as each project is scaffolded. `00-data-explorer` is the
+# shared data foundation (FastF1 ingestion + the explorer) that projects depend on.
+members = ["00-data-explorer", "01-tire-strategy"]
 
 # Shared development toolchain, installed into the single workspace venv.
 [dependency-groups]
@@ -46,7 +47,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["tire_strategy"]
+known-first-party = ["f1_foundation", "tire_strategy"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection idiom: `Depends(...)` in argument defaults.
@@ -61,7 +62,7 @@ reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
-testpaths = ["01-tire-strategy/tests"]
+testpaths = ["00-data-explorer/tests", "01-tire-strategy/tests"]
 markers = [
     "integration: exercises FastF1 (network on first run, cache thereafter); slower",
 ]

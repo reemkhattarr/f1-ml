@@ -46,6 +46,9 @@ mlartifacts/
 .env.*
 !.env.example
 
+# --- Claude Code (machine-local settings + transient locks) ---
+.claude/
+
 # --- OS / editor ---
 .DS_Store
 .idea/

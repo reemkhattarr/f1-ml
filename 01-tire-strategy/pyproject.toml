@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Predict optimal pit-stop timing and tire compound from live F1 race state."
 requires-python = "==3.11.*"
 dependencies = [
+    "f1-foundation",
     "fastf1>=3.4.0",
     "pandas>=2.2.0",
     "numpy>=2.0.0",
@@ -18,6 +19,10 @@ dependencies = [
     "httpx>=0.28.1",
     "gradio>=6.15.2",
 ]
+
+# Resolve the shared foundation from the local workspace, not PyPI.
+[tool.uv.sources]
+f1-foundation = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

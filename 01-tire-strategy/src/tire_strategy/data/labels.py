@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tire_strategy.data.ingest import load_race, load_results, retired_drivers
+from f1_foundation import load_race, load_results, retired_drivers
 
 
 def add_pit_and_compound_labels(laps: pd.DataFrame) -> pd.DataFrame:

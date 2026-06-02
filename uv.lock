@@ -4,6 +4,7 @@ requires-python = "==3.11.*"
 
 [manifest]
 members = [
+    "f1-foundation",
     "f1-ml-portfolio",
     "tire-strategy",
 ]
@@ -760,6 +761,27 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ea/8d/a7121ffe5f402dc015277d2d31eb82d2187334503a011c18f2e78ecbb9b2/entrypoints-0.4.tar.gz", hash = "sha256:b706eddaa9218a19ebcd67b56818f05bb27589b1ca9e8d797b74affad4ccacd4", size = 13974, upload-time = "2022-02-02T21:30:28.172Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/35/a8/365059bbcd4572cbc41de17fd5b682be5868b218c3c5479071865cab9078/entrypoints-0.4-py3-none-any.whl", hash = "sha256:f174b5ff827504fd3cd97cc3f8649f3693f51538c7e4bdf3ef002c8429d42f9f", size = 5294, upload-time = "2022-02-02T21:30:26.024Z" },
+]
+
+[[package]]
+name = "f1-foundation"
+version = "0.1.0"
+source = { editable = "00-data-explorer" }
+dependencies = [
+    { name = "fastf1" },
+    { name = "gradio" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastf1", specifier = ">=3.4.0" },
+    { name = "gradio", specifier = ">=6.15.2" },
+    { name = "numpy", specifier = ">=2.0.0" },
+    { name = "pandas", specifier = ">=2.2.0" },
+    { name = "pyarrow", specifier = ">=24.0.0" },
 ]
 
 [[package]]
@@ -2634,6 +2656,7 @@ name = "tire-strategy"
 version = "0.1.0"
 source = { editable = "01-tire-strategy" }
 dependencies = [
+    { name = "f1-foundation" },
     { name = "fastapi" },
     { name = "fastf1" },
     { name = "gradio" },
@@ -2651,6 +2674,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "f1-foundation", editable = "00-data-explorer" },
     { name = "fastapi", specifier = ">=0.136.3" },
     { name = "fastf1", specifier = ">=3.4.0" },
     { name = "gradio", specifier = ">=6.15.2" },

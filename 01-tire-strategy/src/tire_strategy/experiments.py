@@ -32,6 +32,7 @@ from typing import cast
 
 import pandas as pd
 
+from f1_foundation.explorer_data import RAW_LAPS_PATH
 from tire_strategy.config import PROJECT_ROOT, SEED
 from tire_strategy.data import SLICK_COMPOUNDS, load_dataset
 from tire_strategy.data.features import BOOLEAN_FEATURES, NUMERIC_FEATURES
@@ -59,7 +60,6 @@ from tire_strategy.models.pipeline import (
     build_compound_pipeline,
     build_pit_pipeline,
 )
-from tire_strategy.serving.explorer_data import RAW_LAPS_PATH
 
 MODERN_ERA: tuple[int, ...] = (2022, 2023, 2024, 2025)
 WET_COMPOUNDS: frozenset[str] = frozenset({"INTERMEDIATE", "WET"})

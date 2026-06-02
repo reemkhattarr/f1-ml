@@ -17,13 +17,13 @@ SLEEP_SECS="${2:-3700}"
 
 for round in $(seq 1 "$MAX_ROUNDS"); do
   echo "=== backfill round $round/$MAX_ROUNDS ==="
-  out="$(uv run python -m tire_strategy.serving.explorer_data 2>&1)"
+  out="$(uv run python -m f1_foundation.explorer_data 2>&1)"
   echo "$out" | grep -E "Added|rate limit|Wrote" || true
 
   # Rebuild + redeploy the explorer Space with whatever coverage we now have.
-  uv run python 01-tire-strategy/deploy/build_explorer_space.py >/dev/null 2>&1
+  uv run python 00-data-explorer/deploy/build_explorer_space.py >/dev/null 2>&1
   uv run hf upload reemkhattar/f1-data-explorer \
-    01-tire-strategy/deploy/explorer_space_build . --repo-type space >/dev/null 2>&1 \
+    00-data-explorer/deploy/explorer_space_build . --repo-type space >/dev/null 2>&1 \
     && echo "redeployed explorer (round $round)" || echo "deploy failed (round $round)"
 
   if ! echo "$out" | grep -q "rate limit reached"; then

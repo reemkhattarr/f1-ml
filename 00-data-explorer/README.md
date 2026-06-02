@@ -20,29 +20,34 @@ It sits *before* the four ML projects (`01`–`04`) because it's about
 **seeing the raw material** — the F1 timing data — rather than modelling it. It's
 the first thing a visitor should open to understand what the data looks like.
 
-## Structure & roadmap (read this looking back)
+## Structure — the shared foundation
 
-Today, the shared **FastF1 ingestion layer** (`load_race`, `load_results`, the
-calendar, and the FastF1 cache) and the processed parquets physically live inside
-the `tire_strategy` package under `01-tire-strategy/`, because `01` was built first.
-This explorer reads those parquets.
+`00` is a real workspace member, the package **`f1_foundation`**, that every
+project depends on (and that depends on none of them — the dependency arrow always
+points `01–04 → 00`):
 
-**The intended end-state** — to be done **as the first step of Project 02** (the
-natural, low-risk moment, when a second project actually needs the ingestion) — is
-to extract that ingestion layer into a standalone shared foundation here under `00`,
-relocate the FastF1 cache + parquets to a shared top-level `data/`, and have `01–04`
-all import the `00` foundation. That makes the dependency direction correct
-("everything is built on `00`") and is verifiable against two real consumers rather
-than designed against one. It is deliberately deferred until then to avoid
-refactoring a working, deployed system at the wrong time.
+```
+00-data-explorer/src/f1_foundation/
+├── config.py         # SEED + the shared FastF1 cache and data/ paths
+├── ingest.py         # raw FastF1 → clean per-lap tables (load_race, load_results)
+├── explorer.py       # the Gradio explorer app
+└── explorer_data.py  # the all-sessions raw-data builder
+```
+
+The FastF1 cache and **all** processed parquets live in one shared, gitignored
+`data/` at the workspace root, so every project writes there and the explorer
+browses everything by filename — without importing any project's code. A project
+parquet is shown as a tab only when its file is present, so future projects 02–04
+appear automatically as they produce data.
+
+> Extracted from `01` once a clean seam existed (see `IMPLEMENTATION.md` §13). `01`
+> now imports ingestion from the foundation (`from f1_foundation import load_race`).
 
 ## Implementation
 
-The app reuses the shared `tire_strategy` package (it reads the parquets that
-project `01` builds):
-
-- App: [`01-tire-strategy/src/tire_strategy/serving/explorer.py`](../01-tire-strategy/src/tire_strategy/serving/explorer.py)
-- Deploy scaffold: [`01-tire-strategy/deploy/explorer_space/`](../01-tire-strategy/deploy/explorer_space/) + `build_explorer_space.py`
+- App: [`src/f1_foundation/explorer.py`](src/f1_foundation/explorer.py)
+- Raw-data builder: [`src/f1_foundation/explorer_data.py`](src/f1_foundation/explorer_data.py)
+- Deploy scaffold: [`deploy/explorer_space/`](deploy/explorer_space/) + `build_explorer_space.py`
 
 Run locally: `just explorer`. Rebuild + redeploy the Space: `just build-explorer-space && just deploy-explorer`.
 
