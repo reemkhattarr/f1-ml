@@ -46,6 +46,11 @@ class FeatureSpec:
 
 DEFAULT_FEATURES = FeatureSpec()
 
+# The compound head additionally uses the constructor (`team`): which compound a
+# team fits is mildly team-flavoured (a measured 5/5-fold accuracy win), whereas
+# *when* to pit is not — so the pit head deliberately stays on DEFAULT_FEATURES.
+COMPOUND_FEATURES = FeatureSpec(categorical=(*CATEGORICAL_FEATURES, "team"))
+
 
 def _num(series: pd.Series) -> pd.Series:
     """Coerce a (possibly nullable) column to plain float64, NA -> NaN."""

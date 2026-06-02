@@ -44,6 +44,7 @@ from tire_strategy.models import (
 )
 from tire_strategy.models.baselines import MostFrequentCompound
 from tire_strategy.models.metrics import asymmetric_pit_cost, best_cost_threshold
+from tire_strategy.models.pipeline import COMPOUND_FEATURES
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ def train() -> dict:
         logger.info("Grouped CV across all races ...")
         cv = cross_validate_pit(cv_df, n_splits=5, params=tuned)
         mlflow.log_metrics({f"cv_{k}": v for k, v in cv["agg"].items()})
-        cv_comp = cross_validate_compound(cv_df, n_splits=5)
+        cv_comp = cross_validate_compound(cv_df, n_splits=5, features=COMPOUND_FEATURES)
         mlflow.log_metrics({f"cv_compound_{k}": v for k, v in cv_comp.items()})
 
         # --- Pit head: fit on train, calibrate on val (deployment-style holdout) ---
@@ -155,7 +156,7 @@ def train() -> dict:
         logger.info("Fitting compound head (%d train pits) ...", len(comp_train))
         comp_y_train = cast(pd.Series, comp_train["label_compound"].astype(str))
         comp_y_test = cast(pd.Series, comp_test["label_compound"].astype(str))
-        compound_pipeline = build_compound_pipeline()
+        compound_pipeline = build_compound_pipeline(features=COMPOUND_FEATURES)
         compound_pipeline.fit(comp_train, comp_y_train)
         comp_pred = compound_pipeline.predict(comp_test)
         compound_acc = float((comp_pred == comp_y_test).mean())
