@@ -8,6 +8,7 @@ import pytest
 
 from tire_strategy.data.features import SLICK_COMPOUNDS
 from tire_strategy.models import build_compound_pipeline, build_pit_pipeline
+from tire_strategy.serving import demo
 from tire_strategy.serving.demo import drivers_in, lap_prediction, probability_curve
 from tire_strategy.serving.models import ModelBundle
 
@@ -66,3 +67,22 @@ def test_demo_recommendation_on_monza_2024() -> None:
 
     # An out-of-range lap yields no data.
     assert lap_prediction(bundle, 2024, "Monza", "LEC", 999) == {}
+
+
+def test_race_results_keeps_only_the_race_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    # results.parquet holds every session; FP/Q rows must not leak into the race
+    # classification (they did: a driver could appear as P1 twice).
+    res = pd.DataFrame(
+        {
+            "year": [2024] * 4,
+            "circuit": ["Monza"] * 4,
+            "session": ["Q", "R", "R", "FP1"],
+            "Abbreviation": ["LEC", "LEC", "PIA", "NOR"],
+            "TeamName": ["Ferrari", "Ferrari", "McLaren", "McLaren"],
+            "Position": [1.0, 1.0, 2.0, 1.0],
+        }
+    )
+    monkeypatch.setattr(demo, "_results", lambda: res)
+    out = demo.race_results(2024, "Monza")
+    assert out["Driver"].tolist() == ["LEC", "PIA"]
+    assert out["Position"].tolist() == [1, 2]

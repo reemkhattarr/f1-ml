@@ -40,7 +40,11 @@ def race_results(year: int, circuit: str) -> pd.DataFrame:
     res = _results()
     if res is None:
         return pd.DataFrame()
-    df = cast(pd.DataFrame, res[(res["year"] == year) & (res["circuit"] == circuit)]).copy()
+    mask = (res["year"] == year) & (res["circuit"] == circuit)
+    # results.parquet covers every session (FP/Q/Sprint/R); the classification is the race's.
+    if "session" in res.columns:
+        mask &= res["session"] == "R"
+    df = cast(pd.DataFrame, res[mask]).copy()
     df["_pos"] = cast(pd.Series, pd.to_numeric(df["Position"], errors="coerce"))
     df = df.sort_values("_pos")
     df["Position"] = df["_pos"].astype("Int64")

@@ -12,6 +12,12 @@ messy sequential data: honest labels, leak-free features, calibrated uncertainty
 a strategically-meaningful metric, trustworthy evaluation, and a deployable service
 + demo.
 
+**[▶ Live demo](https://huggingface.co/spaces/reemkhattar/f1-tire-strategy)** — pick a
+race and driver, scrub through the laps, and compare the model's call with what the
+team actually did.
+
+![Tire Strategy demo — Monza 2024](../docs/images/tire-strategy-demo.png)
+
 ## Headline result (5-fold grouped CV across all 92 races)
 
 | Metric | Model | "Never pit" | Rule-based |
@@ -44,7 +50,7 @@ cost ratio from 2:1 to 10:1** — it is not an artifact of one assumption.
 f1_foundation.ingest → labels → leak-safe features → dataset (~176k laps, 2018-2026;
        trains on the 2022-2025 ground-effect era)
        → race-atomic temporal / grouped-CV split
-       → LightGBM pit head (scale_pos_weight + isotonic calibration + cost threshold)
+       → LightGBM pit head (scale_pos_weight + isotonic calibration + F1-optimal threshold)
        + LightGBM compound head (slicks only, balanced, team-aware) + rain gate
        → evaluate vs baselines (MLflow) → FastAPI service → Gradio demo
 ```
@@ -58,7 +64,7 @@ just data                      # build the dataset from FastF1 (cached); trains 
 just train                     # train + evaluate + log to MLflow + save artifacts
 just serve                     # FastAPI at http://localhost:8000 (docs at /docs)
 just demo                      # interactive Gradio demo
-just check                     # ruff + pyright + pytest (46 tests)
+just check                     # ruff + pyright + pytest (48 tests)
 ```
 
 Other recipes: `just tune` (Optuna), `just mlflow-ui`, `just fmt`, `just experiment <name>`.

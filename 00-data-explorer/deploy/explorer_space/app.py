@@ -4,6 +4,6 @@ import sys
 
 sys.path.insert(0, "00-data-explorer/src")
 
-from f1_foundation.explorer import build_explorer
+from f1_foundation.explorer import build_explorer, launch_kwargs
 
-build_explorer().launch()
+build_explorer().launch(**launch_kwargs())

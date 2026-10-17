@@ -12,4 +12,5 @@ sys.path.insert(0, "01-tire-strategy/src")
 
 from tire_strategy.serving.demo import build_demo
 
-build_demo().launch()
+# SSR off: on Spaces its Node proxy can fail Gradio's startup localhost check.
+build_demo().launch(ssr_mode=False)

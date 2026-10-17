@@ -207,8 +207,7 @@ def view(section: Section, year: str, circuit: str, session: str, driver: str, m
 def build_explorer():  # pragma: no cover - UI wiring
     import gradio as gr
 
-    theme = gr.themes.Soft()  # type: ignore[attr-defined]
-    with gr.Blocks(theme=theme, css=_CSS, title="F1 Data Explorer") as demo:
+    with gr.Blocks(title="F1 Data Explorer") as demo:
         gr.Markdown(
             "# 🏎️ F1 Data Explorer\n"
             "The raw F1 timing data behind the portfolio. Pick a tab, then filter by "
@@ -233,19 +232,28 @@ def build_explorer():  # pragma: no cover - UI wiring
                         [_ALL, *_options(section, section.driver_col)], value=_ALL, label="Driver"
                     )
                     max_rows = gr.Slider(50, 1000, value=200, step=50, label="Max rows")
-                info = gr.Markdown()
-                table = gr.Dataframe(interactive=False, wrap=False, max_height=560)
+                # Initial values go in the constructors: Gradio 6 ignores `.value`
+                # assigned after creation, which left every table blank.
+                init_df, init_info = view(section, _ALL, _ALL, _ALL, _ALL, 200)
+                info = gr.Markdown(init_info)
+                table = gr.Dataframe(init_df, interactive=False, wrap=False, max_height=560)
 
                 def _update(y, c, s, d, m, _section=section):
                     return view(_section, y, c, s, d, m)
 
-                init = view(section, _ALL, _ALL, _ALL, _ALL, 200)
-                table.value, info.value = init[0], init[1]
                 for ctrl in (year, circuit, session, driver, max_rows):
                     ctrl.change(_update, [year, circuit, session, driver, max_rows], [table, info])
 
     return demo
 
 
+def launch_kwargs() -> dict:  # pragma: no cover - UI wiring
+    """Gradio 6 takes theme/css in launch(), not Blocks(). SSR is off: on Spaces its
+    Node proxy fails the startup localhost check ("a shareable link must be created")."""
+    import gradio as gr
+
+    return {"theme": gr.themes.Soft(), "css": _CSS, "ssr_mode": False}  # type: ignore[attr-defined]
+
+
 if __name__ == "__main__":  # pragma: no cover
-    build_explorer().launch()
+    build_explorer().launch(**launch_kwargs())

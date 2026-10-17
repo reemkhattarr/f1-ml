@@ -174,8 +174,8 @@ in the cloud (resumable; ~300k+ lap rows and growing).
 
 **01 — Tire Strategy: COMPLETE end-to-end and live.** Data (2018–2026 ingested;
 trained on the 2022–2025 ground-effect era, holdout 2025), a decomposed two-head
-model (calibrated pit-timing head + slick compound head, with a track-temp-aware
-rain gate for wet stops), grouped-CV evaluation with an asymmetric strategic-cost
+model (calibrated pit-timing head + slick compound head, with a flat
+raining -> INTERMEDIATE gate for wet stops; the track-temp refinement was reverted in #30), grouped-CV evaluation with an asymmetric strategic-cost
 metric, MLflow tracking, a persistent experiment log (`experiments/RESULTS.md`),
 a FastAPI service, a pit-loss-vs-degradation race simulator, and a Gradio demo
 (strategy timeline, results panel, auto race notes) — all live on Hugging Face.

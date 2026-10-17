@@ -15,6 +15,11 @@ data foundation that every project depends on.
 | 🔎 **F1 Data Explorer** — browse every field of every dataset (all sessions: FP/Q/Sprint/Race, weather, results, lap timing) | https://huggingface.co/spaces/reemkhattar/f1-data-explorer |
 | 🏎️ **Tire Strategy** — scrub a historical race; see the model's pit/compound call vs what the team actually did | https://huggingface.co/spaces/reemkhattar/f1-tire-strategy |
 
+The demos run on free Hugging Face hardware and sleep when idle, so the first load
+can take ~30 s.
+
+![Tire Strategy demo — Monza 2024](docs/images/tire-strategy-demo.png)
+
 ## Structure
 
 ```
@@ -40,11 +45,13 @@ config, and a Gradio explorer that lets anyone browse the raw material behind th
 models — every session type, filterable by season / circuit / session / driver.
 Kept fresh by a rate-limit-aware, resumable GitHub Actions backfill.
 
+![F1 Data Explorer](docs/images/data-explorer-demo.png)
+
 ### 01 · Tire Strategy Prediction — ✅ complete, live
 Predicts pit-stop timing and tyre-compound choice from live race state on the
 2022–2025 ground-effect era. A **decomposed two-head model** — a calibrated
-pit-timing head and a slick compound head, with a track-temperature-aware rain gate
-for wet stops — evaluated with grouped cross-validation and an **asymmetric
+pit-timing head and a slick compound head, with a deterministic rain gate for wet
+stops — evaluated with grouped cross-validation and an **asymmetric
 strategic-cost** metric (a missed pit costs more than a spurious one).
 
 | Metric (5-fold grouped CV, 92 races) | Model | "Never pit" | Rule-based |

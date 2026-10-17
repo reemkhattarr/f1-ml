@@ -42,7 +42,7 @@ def test_render_writes_comparison_and_details(tmp_log: Path) -> None:
         ],
         timestamp="2026-06-01T00:00:00+00:00",
     )
-    md = (tmp_log / "RESULTS.md").read_text()
+    md = (tmp_log / "RESULTS.md").read_text(encoding="utf-8")
     assert "## season-scope" in md
     assert "no 2025" in md and "+2025" in md
     assert "0.3000" in md and "0.2800" in md  # metric values formatted
@@ -54,7 +54,7 @@ def test_render_handles_bool_and_empty(tmp_log: Path) -> None:
         [Run("g", "x", {}, {"cv_beats_both": True, "extra": 1.0})],
         timestamp="2026-06-01T00:00:00+00:00",
     )
-    md = (tmp_log / "RESULTS.md").read_text()
+    md = (tmp_log / "RESULTS.md").read_text(encoding="utf-8")
     assert "✅" in md  # bool rendered as a check
     # A run missing a column still renders (blank cell), not a crash:
     render_report(tmp_log / "RESULTS.md")
