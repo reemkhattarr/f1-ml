@@ -2,17 +2,18 @@ name: Refresh F1 data & redeploy
 
 # Keeps the model dataset and demo Space current as new races happen.
 #
-# Opt-in: it runs only on a manual trigger until you uncomment the `schedule`
-# block below, and it needs an `HF_TOKEN` repository secret (a Hugging Face write
-# token) under Settings -> Secrets and variables -> Actions.
+# Runs every Monday at 09:00 UTC (the day after most races) and on manual trigger.
+# It needs an `HF_TOKEN` repository secret (a Hugging Face write token) under
+# Settings -> Secrets and variables -> Actions. The explorer Space is updated by
+# the separate "Backfill explorer" workflow.
 #
 # See docs at 01-tire-strategy/docs/DATA_UPDATES.md.
 
 on:
   workflow_dispatch: {}
-  # Uncomment to run automatically every Monday at 09:00 UTC (after most races):
-  # schedule:
-  #   - cron: "0 9 * * 1"
+  # Every Monday at 09:00 UTC (after most races):
+  schedule:
+    - cron: "0 9 * * 1"
 
 permissions:
   contents: read
