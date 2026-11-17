@@ -7,6 +7,11 @@ name: Refresh F1 data & redeploy
 # Settings -> Secrets and variables -> Actions. The explorer Space is updated by
 # the separate "Backfill explorer" workflow.
 #
+# CI runners start with no data (`data/` is gitignored), so the run first pulls
+# the current dataset from the live Space and only fetches races it doesn't have.
+# It stops before retraining if the dataset would shrink, and skips retrain +
+# deploy when there is nothing new.
+#
 # See docs at 01-tire-strategy/docs/DATA_UPDATES.md.
 
 on:
@@ -27,10 +32,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -38,7 +43,7 @@ jobs:
         run: uv python install 3.11
 
       - name: Cache FastF1 downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: data/cache
           key: fastf1-cache-${{ github.run_id }}
@@ -47,14 +52,59 @@ jobs:
       - name: Sync dependencies
         run: uv sync --all-packages
 
-      - name: Incrementally refresh the model dataset + retrain + rebuild bundle
+      - name: Seed the dataset from the live Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # Mirrors `just refresh` (inlined so the runner needs no `just` binary).
+          mkdir -p data/processed
+          for f in tire_strategy_dataset results; do
+            for space in reemkhattar/f1-tire-strategy reemkhattar/f1-data-explorer; do
+              if uv run hf download "$space" "data/processed/$f.parquet" \
+                   --repo-type space --local-dir /tmp/seed_${space##*/} ${HF_TOKEN:+--token "$HF_TOKEN"} >/dev/null 2>&1; then
+                cp "/tmp/seed_${space##*/}/data/processed/$f.parquet" data/processed/
+                echo "Seeded $f.parquet from $space"
+                break
+              fi
+            done
+          done
+          if [ ! -f data/processed/tire_strategy_dataset.parquet ]; then
+            echo "::error::Could not download the existing dataset from either Space; refusing to rebuild from scratch (it would hit the FastF1 rate limit)."
+            exit 1
+          fi
+
+      - name: Incrementally refresh the model dataset
+        id: update
+        run: |
+          count() {
+            uv run python -c "
+          import pandas as pd
+          df = pd.read_parquet('data/processed/tire_strategy_dataset.parquet')
+          cols = [c for c in ('year', 'round') if c in df.columns] or [c for c in ('Year', 'RoundNumber') if c in df.columns]
+          print(len(df[cols].drop_duplicates()) if len(cols) == 2 else len(df))
+          "
+          }
+          before="$(count)"
           uv run python -m tire_strategy.data.dataset --update 2022 2023 2024 2025 2026
+          after="$(count)"
+          echo "Races before: $before, after: $after"
+          echo "before=$before" >> "$GITHUB_OUTPUT"
+          echo "after=$after" >> "$GITHUB_OUTPUT"
+          if [ "$after" -lt "$before" ]; then
+            echo "::error::Dataset shrank ($before -> $after races); not retraining or deploying."
+            exit 1
+          fi
+          if [ "$after" -eq "$before" ]; then
+            echo "::notice::No new races since the last refresh - nothing to retrain or deploy."
+          fi
+
+      - name: Retrain + rebuild the Space bundle
+        if: steps.update.outputs.after != steps.update.outputs.before
+        run: |
           uv run python -m tire_strategy.train
           uv run python 01-tire-strategy/deploy/build_space.py
 
       - name: Deploy the demo Space
+        if: steps.update.outputs.after != steps.update.outputs.before
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
