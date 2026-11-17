@@ -1,22 +1,16 @@
 name: Backfill explorer (all sessions)
 
-# Cloud-driven backfill + updater for the F1 Data Explorer to *all* session types
-# (FP/Q/Sprint/R) for every season. FastF1 caps at ~500 calls/hour, so it runs in
-# batches: each run pulls the current parquets from the Space, adds one
-# rate-limited batch of new sessions, and redeploys when it added something.
+# Keeps the F1 Data Explorer Space (reemkhattar/f1-data-explorer) up to date.
 #
-# Setup: add an `HF_TOKEN` repo secret (a Hugging Face write token) under
-# Settings -> Secrets and variables -> Actions. Runs on the schedule below.
+# Each run pulls the explorer's current parquets from the Space, fetches sessions
+# it doesn't have yet (newest first, at most what FastF1's ~500 calls/hour allows)
+# and redeploys the Space when anything changed. Sessions that never got data
+# (cancelled / unpublished) are remembered in explorer_unavailable.json so they
+# don't eat the call budget on every run.
 #
-# Incremental updater: each run adds only the sessions FastF1 has published since the
-# last run (data usually appears 30-120 minutes after a session ends) and redeploys the
-# Space only if something new was added. A run with nothing new is a cheap no-op.
-#
-# Schedule: every 6 hours on Fri/Sat/Sun/Mon (UTC) - race weekends plus the day after - so
-# new sessions reach the explorer within a few hours. To catch up immediately, run it
-# manually from the Actions tab (Run workflow).
-#
-# See 01-tire-strategy/docs/DATA_UPDATES.md.
+# Runs every 6 hours Friday-Monday (race weekends) and on manual trigger.
+# A run fails if it hit the rate limit without resolving a single session — that
+# means the backfill is stuck, rather than "nothing new".
 
 on:
   workflow_dispatch: {}
@@ -35,10 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -46,7 +40,7 @@ jobs:
         run: uv python install 3.11
 
       - name: Cache FastF1 downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: data/cache
           key: fastf1-cache-${{ github.run_id }}
@@ -60,37 +54,46 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           if [ -z "$HF_TOKEN" ]; then
-            echo "::error::HF_TOKEN secret not set — see docs/DATA_UPDATES.md."
+            echo "::error::HF_TOKEN secret is not set."
             exit 1
           fi
 
-      - name: Pull current parquets from the Space (resume point)
+      - name: Pull the explorer's current data from the Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          dest=data/processed
-          mkdir -p "$dest"
-          # The Space stores parquets at data/processed/ (new layout) or, before the
-          # 00-foundation migration, 01-tire-strategy/data/processed/. Try both so a
-          # resume never loses prior progress.
-          for f in raw_laps weather results tire_strategy_dataset stint_laps telemetry_features; do
-            for sp in "data/processed/$f.parquet" "01-tire-strategy/data/processed/$f.parquet"; do
-              uv run hf download reemkhattar/f1-data-explorer "$sp" --repo-type space \
-                --local-dir /tmp/space --token "$HF_TOKEN" >/dev/null 2>&1 || true
-              if [ -f "/tmp/space/$sp" ]; then cp "/tmp/space/$sp" "$dest/"; echo "resumed $f.parquet"; break; fi
+          mkdir -p data/processed
+          for f in raw_laps.parquet weather.parquet results.parquet tire_strategy_dataset.parquet \
+                   stint_laps.parquet telemetry_features.parquet explorer_unavailable.json; do
+            for p in "data/processed/$f" "01-tire-strategy/data/processed/$f"; do
+              if uv run hf download reemkhattar/f1-data-explorer "$p" --repo-type space \
+                   --local-dir /tmp/space --token "$HF_TOKEN" >/dev/null 2>&1; then
+                cp "/tmp/space/$p" data/processed/
+                echo "Pulled $f"
+                break
+              fi
             done
           done
 
-      - name: Run one backfill batch (resumable, halts on rate limit)
+      - name: Fetch new sessions
         id: batch
         run: |
-          out="$(uv run python -m f1_foundation.explorer_data 2>&1)"
-          echo "$out" | grep -E "Added|rate limit|Wrote" || true
-          added="$(echo "$out" | grep -oE 'Added [0-9]+ new' | grep -oE '[0-9]+' | head -1)"
+          set -o pipefail
+          uv run python -m f1_foundation.explorer_data 2>&1 | tee /tmp/batch.log
+          line="$(grep -E '^RESULT ' /tmp/batch.log | tail -1)"
+          added="$(echo "$line" | sed -E 's/.*added=([0-9]+).*/\1/')"
+          unavailable="$(echo "$line" | sed -E 's/.*unavailable=([0-9]+).*/\1/')"
+          limited="$(echo "$line" | sed -E 's/.*rate_limited=([01]).*/\1/')"
           echo "added=${added:-0}" >> "$GITHUB_OUTPUT"
+          echo "unavailable=${unavailable:-0}" >> "$GITHUB_OUTPUT"
+          echo "Added ${added:-0} session(s), marked ${unavailable:-0} unavailable, rate limited: ${limited:-0}"
+          if [ "${limited:-0}" = "1" ] && [ "${added:-0}" = "0" ] && [ "${unavailable:-0}" = "0" ]; then
+            echo "::error::Hit the FastF1 rate limit without resolving any session - the backfill is stuck."
+            echo "stuck=1" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Build + redeploy the explorer Space (only if new sessions were added)
-        if: steps.batch.outputs.added != '0'
+      - name: Build + redeploy the explorer Space
+        if: steps.batch.outputs.added != '0' || steps.batch.outputs.unavailable != '0'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
@@ -99,5 +102,9 @@ jobs:
             00-data-explorer/deploy/explorer_space_build . --repo-type space --token "$HF_TOKEN"
 
       - name: Nothing new?
-        if: steps.batch.outputs.added == '0'
+        if: steps.batch.outputs.added == '0' && steps.batch.outputs.unavailable == '0' && steps.batch.outputs.stuck != '1'
         run: echo "::notice::No new sessions since the last run - nothing to deploy."
+
+      - name: Fail if stuck
+        if: steps.batch.outputs.stuck == '1'
+        run: exit 1
