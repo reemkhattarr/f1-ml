@@ -30,6 +30,7 @@ _PARQUETS = (
     "tire_strategy_dataset.parquet",
     "stint_laps.parquet",
     "telemetry_features.parquet",
+    "explorer_unavailable.json",  # sessions the backfill gave up on (not a parquet)
 )
 
 
