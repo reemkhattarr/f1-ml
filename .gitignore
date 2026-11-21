@@ -30,6 +30,7 @@ htmlcov/
 **/mlflow/
 **/artifacts/
 **/space_build/
+**/site_build/
 **/explorer_space_build/
 mlruns/
 mlartifacts/
