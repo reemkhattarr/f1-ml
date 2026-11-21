@@ -33,7 +33,9 @@ def _toy() -> pd.DataFrame:
         ("C", 1, False, False, "HARD"),
         ("C", 2, False, False, "HARD"),  # final lap of a retiree -> excluded
     ]
-    df = pd.DataFrame(rows, columns=["driver", "lap_number", "is_in_lap", "flag_red", "compound"])
+    df = pd.DataFrame(
+        rows, columns=pd.Index(["driver", "lap_number", "is_in_lap", "flag_red", "compound"])
+    )
     df["is_in_lap"] = df["is_in_lap"].astype(bool)
     df["flag_red"] = df["flag_red"].astype("boolean")
     df["compound"] = df["compound"].astype("string")
@@ -42,18 +44,18 @@ def _toy() -> pd.DataFrame:
 
 def test_strategic_pit_and_fitted_compound() -> None:
     out = build_labels(_toy(), retired={"C"})
-    a3 = out[(out["driver"] == "A") & (out["lap_number"] == 3)].iloc[0]
+    a3 = out.loc[(out["driver"] == "A") & (out["lap_number"] == 3)].iloc[0]
     assert a3["label_pit"] == 1
     assert a3["label_compound"] == "HARD"  # the tyre fitted on the out-lap
     # Every non-pit A lap is a "stay out".
-    a_other = out[(out["driver"] == "A") & (out["lap_number"] != 3)]
+    a_other = out.loc[(out["driver"] == "A") & (out["lap_number"] != 3)]
     assert (a_other["label_pit"] == 0).all()
     assert a_other["label_compound"].isna().all()
 
 
 def test_red_flag_change_is_not_a_strategic_pit() -> None:
     out = build_labels(_toy(), retired={"C"})
-    b2 = out[(out["driver"] == "B") & (out["lap_number"] == 2)].iloc[0]
+    b2 = out.loc[(out["driver"] == "B") & (out["lap_number"] == 2)].iloc[0]
     assert b2["label_pit"] == 0
     assert pd.isna(b2["label_compound"])
     assert b2["train_eligible"] is False or b2["train_eligible"] == False  # noqa: E712
@@ -62,7 +64,7 @@ def test_red_flag_change_is_not_a_strategic_pit() -> None:
 
 def test_retiree_final_lap_excluded() -> None:
     out = build_labels(_toy(), retired={"C"})
-    c = out[out["driver"] == "C"].sort_values("lap_number")
+    c = out.loc[out["driver"] == "C"].sort_values("lap_number")
     assert c.iloc[-1]["exclude_reason"] == "retirement"
     assert bool(c.iloc[-1]["train_eligible"]) is False
     # The earlier C lap is still a valid stay-out decision.
@@ -81,11 +83,11 @@ def test_pit_window_label_looks_forward_within_race() -> None:
         }
     )
     out = add_pit_window_label(df, horizon=3).sort_values(["round", "lap_number"])
-    r1 = out[out["round"] == 1]["label_pit_window"].tolist()
+    r1 = out.loc[out["round"] == 1]["label_pit_window"].tolist()
     # laps 1-3 are within 3 of the lap-3 stop; laps 4-5 are not.
     assert r1 == [1, 1, 1, 0, 0]
     # Round-2's lap-1 stop must NOT leak back into round 1's lap 5.
-    assert out[(out["round"] == 1) & (out["lap_number"] == 5)]["label_pit_window"].iloc[0] == 0
+    assert out.loc[(out["round"] == 1) & (out["lap_number"] == 5)]["label_pit_window"].iloc[0] == 0
 
 
 @pytest.mark.integration
@@ -93,12 +95,12 @@ def test_labelled_monza_2024_matches_known_facts() -> None:
     df = load_labelled_race(2024, "Monza")
 
     # Leclerc's winning one-stop: a single strategic pit, lap 15, fitting hards.
-    lec_pits = df[(df["driver"] == "LEC") & (df["label_pit"] == 1)]
+    lec_pits = df.loc[(df["driver"] == "LEC") & (df["label_pit"] == 1)]
     assert len(lec_pits) == 1
     assert int(lec_pits["lap_number"].iloc[0]) == 15
     assert lec_pits["label_compound"].iloc[0] == "HARD"
 
     # Tsunoda retired -> his final lap is the only retirement exclusion type present.
     assert "retirement" in set(df["exclude_reason"].dropna())
-    tsu_excluded = df[(df["driver"] == "TSU") & (df["exclude_reason"] == "retirement")]
+    tsu_excluded = df.loc[(df["driver"] == "TSU") & (df["exclude_reason"] == "retirement")]
     assert len(tsu_excluded) == 1
