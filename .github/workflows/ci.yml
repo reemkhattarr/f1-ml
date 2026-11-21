@@ -1,0 +1,60 @@
+name: CI
+
+# Quality gate for every pull request and every push to main: the code must pass
+# lint, formatting, type checking and the test suite before it can be merged.
+# Unit tests run offline; integration tests check the real FastF1 data for a known
+# race (Monza 2024) so a change in the upstream data format is caught early.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv python install 3.11
+      - run: uv sync --all-packages --locked
+      - name: Lint
+        run: uv run ruff check .
+      - name: Formatting
+        run: uv run ruff format --check .
+      - name: Types
+        run: uv run pyright
+      - name: Unit tests
+        run: uv run pytest -m "not integration"
+
+  integration:
+    name: Integration tests (FastF1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv python install 3.11
+      - run: uv sync --all-packages --locked
+      - name: Cache FastF1 downloads
+        uses: actions/cache@v5
+        with:
+          path: data/cache
+          key: fastf1-tests-${{ hashFiles('**/tests/**') }}
+          restore-keys: fastf1-
+      - name: Integration tests
+        run: uv run pytest -m integration

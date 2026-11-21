@@ -1,116 +1,143 @@
-name: Refresh F1 data & redeploy
+name: Train & publish tire-strategy model
 
-# Keeps the model dataset and demo Space current as new races happen.
+# Keeps the tire-strategy model and its public demo current, entirely in the cloud.
 #
-# Runs every Monday at 09:00 UTC (the day after most races) and on manual trigger.
-# It needs an `HF_TOKEN` repository secret (a Hugging Face write token) under
-# Settings -> Secrets and variables -> Actions. The explorer Space is updated by
-# the separate "Backfill explorer" workflow.
+# 1. Load the existing dataset (GitHub release "data-latest"; first run falls back
+#    to the old Hugging Face Space) and add any races it does not have yet.
+# 2. Retrain when there are new races (or when run by hand), holding out the
+#    latest season with enough races (2026) as the test set.
+# 3. Quality gate: publish only if the new model beats both baselines and is not
+#    worse than the live model (see tire_strategy/gate.py).
+# 4. Export the race-replay site and deploy it to GitHub Pages:
+#    https://reemkhattarr.github.io/f1-ml/
+# 5. Save the dataset and model files to the "data-latest" release.
 #
-# CI runners start with no data (`data/` is gitignored), so the run first pulls
-# the current dataset from the live Space and only fetches races it doesn't have.
-# It stops before retraining if the dataset would shrink, and skips retrain +
-# deploy when there is nothing new.
-#
-# See docs at 01-tire-strategy/docs/DATA_UPDATES.md.
+# Runs every Monday after the race weekend, and on demand from the Actions tab.
 
 on:
-  workflow_dispatch: {}
-  # Every Monday at 09:00 UTC (after most races):
+  workflow_dispatch:
+    inputs:
+      retrain:
+        description: "Retrain and republish even if there are no new races"
+        type: boolean
+        default: true
   schedule:
     - cron: "0 9 * * 1"
 
 permissions:
-  contents: read
+  contents: write   # update the data-latest release
+  pages: write      # deploy the demo
+  id-token: write   # required by deploy-pages
 
 concurrency:
   group: refresh-data
   cancel-in-progress: false
 
+env:
+  GH_TOKEN: ${{ github.token }}
+  DATA: data/processed
+  ARTIFACTS: 01-tire-strategy/artifacts
+  SITE: 01-tire-strategy/deploy/site_build
+
 jobs:
-  refresh:
+  train:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
     steps:
       - uses: actions/checkout@v5
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.11
-
+      - run: uv python install 3.11
+      - run: uv sync --all-packages --locked
       - name: Cache FastF1 downloads
         uses: actions/cache@v5
         with:
           path: data/cache
           key: fastf1-cache-${{ github.run_id }}
-          restore-keys: fastf1-cache-
+          restore-keys: fastf1-
 
-      - name: Sync dependencies
-        run: uv sync --all-packages
-
-      - name: Seed the dataset from the live Space
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      - name: Load the existing dataset
         run: |
-          mkdir -p data/processed
-          for f in tire_strategy_dataset results; do
-            for space in reemkhattar/f1-tire-strategy reemkhattar/f1-data-explorer; do
-              if uv run hf download "$space" "data/processed/$f.parquet" \
-                   --repo-type space --local-dir /tmp/seed_${space##*/} ${HF_TOKEN:+--token "$HF_TOKEN"} >/dev/null 2>&1; then
-                cp "/tmp/seed_${space##*/}/data/processed/$f.parquet" data/processed/
-                echo "Seeded $f.parquet from $space"
-                break
-              fi
+          mkdir -p "$DATA"
+          if gh release download data-latest --pattern '*.parquet' --dir "$DATA" --clobber 2>/dev/null; then
+            echo "Loaded dataset from the data-latest release"
+          else
+            for f in tire_strategy_dataset results; do
+              uv run hf download reemkhattar/f1-tire-strategy "data/processed/$f.parquet" \
+                --repo-type space --local-dir /tmp/seed >/dev/null 2>&1 \
+                && cp "/tmp/seed/data/processed/$f.parquet" "$DATA/" || true
             done
-          done
-          if [ ! -f data/processed/tire_strategy_dataset.parquet ]; then
-            echo "::error::Could not download the existing dataset from either Space; refusing to rebuild from scratch (it would hit the FastF1 rate limit)."
+            echo "Loaded dataset from the Hugging Face Space (first run)"
+          fi
+          if [ ! -f "$DATA/tire_strategy_dataset.parquet" ]; then
+            echo "::error::No existing dataset found; refusing to rebuild from scratch (FastF1 rate limit)."
             exit 1
           fi
 
-      - name: Incrementally refresh the model dataset
+      - name: Add new races
         id: update
         run: |
-          count() {
-            uv run python -c "
-          import pandas as pd
-          df = pd.read_parquet('data/processed/tire_strategy_dataset.parquet')
-          cols = [c for c in ('year', 'round') if c in df.columns] or [c for c in ('Year', 'RoundNumber') if c in df.columns]
-          print(len(df[cols].drop_duplicates()) if len(cols) == 2 else len(df))
-          "
-          }
+          count() { uv run python -c "import pandas as pd; df = pd.read_parquet('$DATA/tire_strategy_dataset.parquet'); print(len(df[['year', 'round']].drop_duplicates()))"; }
           before="$(count)"
           uv run python -m tire_strategy.data.dataset --update 2022 2023 2024 2025 2026
           after="$(count)"
           echo "Races before: $before, after: $after"
-          echo "before=$before" >> "$GITHUB_OUTPUT"
-          echo "after=$after" >> "$GITHUB_OUTPUT"
+          echo "new=$((after - before))" >> "$GITHUB_OUTPUT"
           if [ "$after" -lt "$before" ]; then
-            echo "::error::Dataset shrank ($before -> $after races); not retraining or deploying."
+            echo "::error::Dataset shrank ($before -> $after races); stopping."
             exit 1
           fi
-          if [ "$after" -eq "$before" ]; then
-            echo "::notice::No new races since the last refresh - nothing to retrain or deploy."
-          fi
 
-      - name: Retrain + rebuild the Space bundle
-        if: steps.update.outputs.after != steps.update.outputs.before
+      - name: Save the dataset
+        if: steps.update.outputs.new != '0'
         run: |
-          uv run python -m tire_strategy.train
-          uv run python 01-tire-strategy/deploy/build_space.py
+          gh release view data-latest >/dev/null 2>&1 || gh release create data-latest \
+            --title "Latest data and model" --notes "Updated automatically by the training workflow." --latest=false
+          gh release upload data-latest "$DATA"/*.parquet --clobber
 
-      - name: Deploy the demo Space
-        if: steps.update.outputs.after != steps.update.outputs.before
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      - name: Train
+        id: train
+        if: steps.update.outputs.new != '0' || inputs.retrain
+        run: uv run python -m tire_strategy.train
+
+      - name: Quality gate
+        id: gate
+        if: steps.train.outcome == 'success'
         run: |
-          if [ -z "$HF_TOKEN" ]; then
-            echo "::warning::HF_TOKEN not set — skipping deploy. See docs/DATA_UPDATES.md."
-            exit 0
-          fi
-          uv run hf upload reemkhattar/f1-tire-strategy \
-            01-tire-strategy/deploy/space_build . --repo-type space --token "$HF_TOKEN"
+          curl -fsSL https://reemkhattarr.github.io/f1-ml/data/metadata.json -o /tmp/live.json || : > /tmp/live.json
+          uv run python -m tire_strategy.gate "$ARTIFACTS/metadata.json" /tmp/live.json
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Nothing new
+        if: steps.train.outcome == 'skipped'
+        run: echo "::notice::No new races and no retrain requested - the live model stays."
+
+      - name: Build the demo site
+        if: steps.gate.outputs.publish == 'true'
+        run: uv run python -m tire_strategy.export_demo
+
+      - uses: actions/upload-pages-artifact@v5
+        if: steps.gate.outputs.publish == 'true'
+        with:
+          path: ${{ env.SITE }}
+
+      - name: Save the model files
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          gh release view data-latest >/dev/null 2>&1 || gh release create data-latest \
+            --title "Latest data and model" --notes "Updated automatically by the training workflow." --latest=false
+          gh release upload data-latest "$ARTIFACTS"/*.joblib "$ARTIFACTS"/metadata.json --clobber
+
+  deploy:
+    needs: train
+    if: needs.train.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
