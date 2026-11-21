@@ -55,15 +55,24 @@ pitloss-data:
 update-data *SEASONS:
     uv run python -m tire_strategy.data.dataset --update {{SEASONS}}
 
-# Post-race refresh: add new races, retrain, rebuild the deployable demo bundle.
+# Post-race refresh: add new races and retrain (the cloud workflow does this every
+# Monday and publishes the demo; this is the local equivalent, without publishing).
 refresh:
     uv run python -m tire_strategy.data.dataset --update 2022 2023 2024 2025 2026
     just train
-    just build-space
 
-# Push the rebuilt demo bundle live to Hugging Face Spaces.
-deploy-demo:
-    uv run hf upload reemkhattar/f1-tire-strategy 01-tire-strategy/deploy/space_build . --repo-type space
+# Build the race-replay website from the dataset + trained model (-> deploy/site_build).
+export-demo:
+    uv run python -m tire_strategy.export_demo
+
+# Preview the race-replay website at http://localhost:8000 (run `just export-demo` first).
+preview-demo:
+    cd 01-tire-strategy/deploy/site_build && python3 -m http.server 8000
+
+# Quality gate: would this freshly trained model be allowed to replace the live one?
+gate:
+    curl -fsSL https://reemkhattarr.github.io/f1-ml/data/metadata.json -o /tmp/live.json || : > /tmp/live.json
+    uv run python -m tire_strategy.gate 01-tire-strategy/artifacts/metadata.json /tmp/live.json
 
 # Launch the data explorer locally (browse all dataset fields).
 explorer:
@@ -79,12 +88,6 @@ deploy-explorer:
 refresh-explorer:
     uv run python -m f1_foundation.explorer_data
     just build-explorer-space
-
-# Full post-weekend refresh: model demo + explorer bundles (build only, no deploy).
-refresh-all: refresh refresh-explorer
-
-# Deploy both Spaces live (run after `just refresh-all`). See docs/DATA_UPDATES.md.
-deploy-all: deploy-demo deploy-explorer
 
 # Tune the pit-head hyperparameters (Optuna) -> artifacts/best_params.json.
 tune *ARGS:
@@ -110,7 +113,3 @@ serve:
 # Launch the Gradio demo (scrub a historical race: model vs reality).
 demo:
     uv run python -m tire_strategy.serving.demo
-
-# Assemble a deployable Hugging Face Space (needs `just data` + `just train` first).
-build-space:
-    uv run python 01-tire-strategy/deploy/build_space.py

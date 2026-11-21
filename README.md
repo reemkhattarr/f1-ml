@@ -8,12 +8,13 @@ sequential deep learning, unsupervised learning — and ships as a live, free de
 Built as a single **uv workspace** (one lockfile, shared toolchain) with a shared
 data foundation that every project depends on.
 
-## Live demos
+## Live demo
 
-| | Link |
-|---|---|
-| 🔎 **F1 Data Explorer** — browse every field of every dataset (all sessions: FP/Q/Sprint/Race, weather, results, lap timing) | https://huggingface.co/spaces/reemkhattar/f1-data-explorer |
-| 🏎️ **Tire Strategy** — scrub a historical race; see the model's pit/compound call vs what the team actually did | https://huggingface.co/spaces/reemkhattar/f1-tire-strategy |
+**[Tyre strategy replay →](https://reemkhattarr.github.io/f1-ml/)** Pick any race since 2022 and move through it lap by lap: for every car, the model's chance of a pit stop in the next three laps and the tyre it would fit, next to what the team actually did.
+
+It is a static site, rebuilt in the cloud every Monday after a race weekend: GitHub Actions adds the new races, retrains the model, runs a quality gate (the new model must beat both baselines and must not be worse than the live one) and publishes to GitHub Pages. Nothing runs locally and nothing costs money.
+
+The F1 Data Explorer is being moved off Hugging Face and will come back on the same site.
 
 ## Structure
 
@@ -26,7 +27,7 @@ f1-ml/                       uv workspace (one shared uv.lock)
 ├── 03-race-outcome-prediction/  (planned)
 ├── 04-driving-style-clustering/ (planned)
 ├── data/                    gitignored: shared FastF1 cache + all processed parquets
-└── .github/workflows/       CI: weekly model refresh + hourly explorer backfill
+└── .github/workflows/       CI on every PR + weekly cloud training and demo publish
 ```
 
 The dependency arrow always points `01–04 → 00`. Any project parquet written to the
