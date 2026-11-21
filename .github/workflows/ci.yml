@@ -39,10 +39,13 @@ jobs:
       - name: Unit tests
         run: uv run pytest -m "not integration"
 
+  # Depends on the external FastF1 / F1 live-timing service, which can be
+  # unavailable from GitHub's servers. It reports problems but never blocks a merge.
   integration:
     name: Integration tests (FastF1)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
@@ -57,4 +60,4 @@ jobs:
           key: fastf1-tests-${{ hashFiles('**/tests/**') }}
           restore-keys: fastf1-
       - name: Integration tests
-        run: uv run pytest -m integration
+        run: uv run pytest -m integration -o log_cli=true --log-cli-level=WARNING
