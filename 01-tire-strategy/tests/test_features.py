@@ -99,13 +99,13 @@ def test_gaps_are_reconstructed_and_lagged_one_lap() -> None:
         ]
     )
     out = build_features(df)
-    b = out[out["driver"] == "B"].sort_values("lap_number")
+    b = out.loc[out["driver"] == "B"].sort_values("lap_number")
     # Lagged: lap 1 unknown; lap 2 = lap-1 gap (1.0); lap 3 = lap-2 gap (2.0).
     assert pd.isna(b["gap_ahead_s"].iloc[0])
     assert b["gap_ahead_s"].iloc[1] == pytest.approx(1.0)
     assert b["gap_ahead_s"].iloc[2] == pytest.approx(2.0)
     # The leader never has a car ahead.
-    a = out[out["driver"] == "A"]
+    a = out.loc[out["driver"] == "A"]
     assert a["gap_ahead_s"].isna().all()
 
 
@@ -145,13 +145,13 @@ def test_degradation_slope_is_fuel_corrected() -> None:
 @pytest.mark.integration
 def test_features_are_leak_free_on_monza_2024() -> None:
     df = build_features(load_labelled_race(2024, "Monza"))
-    lec = df[df["driver"] == "LEC"].sort_values("lap_number")
+    lec = df.loc[df["driver"] == "LEC"].sort_values("lap_number")
 
     # Leclerc's in-lap (lap 15) is ~90s, but its pace feature must be a prior
     # green lap (~85s), proving current-lap timing never leaks in.
-    lap15 = lec[lec["lap_number"] == 15].iloc[0]
+    lap15 = lec.loc[lec["lap_number"] == 15].iloc[0]
     assert lap15["last_clean_lap_time_s"] < 87.0
 
     # First lap of a new stint has no in-stint history for the slope yet.
-    out_lap = lec[lec["lap_number"] == 16].iloc[0]
+    out_lap = lec.loc[lec["lap_number"] == 16].iloc[0]
     assert pd.isna(out_lap["deg_slope_s_per_lap"])

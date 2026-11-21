@@ -40,3 +40,37 @@ def test_race_group_key_format() -> None:
     keys = race_group_key(_df())
     assert keys.iloc[0] == "2022_5"
     assert keys.iloc[3] == "2025_20"
+
+
+def _races(seasons: dict[int, int]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [(y, r) for y, n in seasons.items() for r in range(1, n + 1)],
+        columns=pd.Index(["year", "round"]),
+    )
+
+
+def test_default_split_holds_out_latest_full_enough_season() -> None:
+    from tire_strategy.models import default_split_seasons
+
+    df = _races({2021: 20, 2022: 22, 2023: 22, 2024: 24, 2025: 24, 2026: 20})
+    train, holdout, val_max = default_split_seasons(df)
+    assert train == (2022, 2023, 2024, 2025)  # pre-era 2021 excluded
+    assert holdout == 2026
+    assert val_max == 10  # first half of the 20 raced 2026 rounds calibrates
+
+
+def test_default_split_waits_for_enough_new_season_races() -> None:
+    from tire_strategy.models import default_split_seasons
+
+    df = _races({2022: 22, 2023: 22, 2024: 24, 2025: 24, 2026: 3})
+    train, holdout, _ = default_split_seasons(df)
+    assert holdout == 2025 and train == (2022, 2023, 2024)
+
+
+def test_default_split_refuses_impossible_data() -> None:
+    import pytest
+
+    from tire_strategy.models import default_split_seasons
+
+    with pytest.raises(ValueError):
+        default_split_seasons(_races({2025: 24}))

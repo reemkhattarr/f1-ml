@@ -1,0 +1,65 @@
+name: CI
+
+# Quality gate for every pull request and every push to main: the code must pass
+# lint, formatting, type checking and the test suite before it can be merged.
+# Unit tests run offline; integration tests check the real FastF1 data for a known
+# race (Monza 2024) so a change in the upstream data format is caught early.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv python install 3.11
+      - run: uv sync --all-packages --locked
+      - name: Lint
+        run: uv run ruff check .
+      - name: Formatting
+        run: uv run ruff format --check .
+      - name: Types
+        run: uv run pyright
+      - name: Unit tests
+        run: uv run pytest -m "not integration"
+
+  # Needs the F1 live-timing service, which refuses GitHub's servers, and some
+  # tests read processed data that only exists locally. So it runs only when
+  # started by hand (Actions > CI > Run workflow); `just test` runs everything locally.
+  integration:
+    name: Integration tests (FastF1)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv python install 3.11
+      - run: uv sync --all-packages --locked
+      - name: Cache FastF1 downloads
+        uses: actions/cache@v5
+        with:
+          path: data/cache
+          key: fastf1-tests-${{ hashFiles('**/tests/**') }}
+          restore-keys: fastf1-
+      - name: Integration tests
+        run: uv run pytest -m integration -o log_cli=true --log-cli-level=WARNING

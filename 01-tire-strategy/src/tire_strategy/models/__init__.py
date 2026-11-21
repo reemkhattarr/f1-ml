@@ -18,6 +18,7 @@ from tire_strategy.models.pipeline import (
 from tire_strategy.models.split import (
     SPLIT_NAMES,
     assign_temporal_split,
+    default_split_seasons,
     race_group_key,
 )
 
@@ -34,6 +35,7 @@ __all__ = [
     "cost_ratio_sweep",
     "cross_validate_compound",
     "cross_validate_pit",
+    "default_split_seasons",
     "evaluate_wet_gate",
     "pit_cost_matrix",
     "race_group_key",

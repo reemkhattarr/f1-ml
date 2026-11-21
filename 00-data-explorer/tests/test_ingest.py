@@ -52,7 +52,7 @@ def test_load_race_monza_2024_matches_known_facts() -> None:
         assert col in df.columns
 
     # Leclerc's winning one-stop: a single in-lap, on lap 15, off mediums.
-    lec_pits = df[(df["driver"] == "LEC") & df["is_in_lap"]]
+    lec_pits = df.loc[(df["driver"] == "LEC") & df["is_in_lap"]]
     assert len(lec_pits) == 1
     assert int(lec_pits["lap_number"].iloc[0]) == 15
     assert lec_pits["compound"].iloc[0] == "MEDIUM"
@@ -64,7 +64,7 @@ def test_load_race_monza_2024_matches_known_facts() -> None:
     # Leakage canary: an in-lap is mechanically slower than the green lap before
     # it (pit-lane time). This is *why* current-lap timing must never be a
     # feature — the test documents the trap as much as it guards it.
-    lec = df[df["driver"] == "LEC"].sort_values("lap_number")
-    in_lap = lec[lec["is_in_lap"]].iloc[0]
-    prior = lec[lec["lap_number"] == in_lap["lap_number"] - 1].iloc[0]
+    lec = df.loc[df["driver"] == "LEC"].sort_values("lap_number")
+    in_lap = lec.loc[lec["is_in_lap"]].iloc[0]
+    prior = lec.loc[lec["lap_number"] == in_lap["lap_number"] - 1].iloc[0]
     assert in_lap["lap_time_s"] > prior["lap_time_s"] + 2.0

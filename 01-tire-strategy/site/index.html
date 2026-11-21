@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tyre strategy replay · Reem Khattar</title>
+<meta name="description" content="Replay any Formula 1 race since 2022 and compare a machine-learning model's pit-stop calls with what the teams actually did.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top wrap">
+  <p class="crumb"><a href="https://reemkhattarr.github.io">Reem Khattar</a></p>
+  <h1>Tyre strategy replay</h1>
+  <p class="lede">Pick a race and move through it lap by lap. For every car, a model built on every race since 2022 estimates the chance of a pit stop in the next three laps and which tyre it would fit. Compare it with what the team actually did.</p>
+</header>
+
+<main class="wrap">
+  <section class="controls" aria-label="Choose a race">
+    <label>Season <select id="season"></select></label>
+    <label class="grow">Race <select id="race"></select></label>
+    <div class="lapctl">
+      <button id="play" type="button" aria-pressed="false">Play</button>
+      <label class="grow">Lap <output id="lapnum">1</output>
+        <input id="lap" type="range" min="1" max="1" value="1">
+      </label>
+    </div>
+  </section>
+
+  <p id="status" class="status" role="status">Loading races…</p>
+
+  <section aria-labelledby="tower-h">
+    <h2 id="tower-h" class="visually-hidden">Cars on this lap</h2>
+    <div class="scroll">
+    <table class="tower" id="tower">
+      <thead>
+        <tr>
+          <th scope="col">Car</th>
+          <th scope="col">Tyre</th>
+          <th scope="col" class="probcol">Pit chance (next 3 laps)</th>
+          <th scope="col">Model</th>
+          <th scope="col">Team</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section class="driver" aria-labelledby="drv-h">
+    <h2 id="drv-h">Select a car to see its race</h2>
+    <svg id="chart" role="img" aria-label="Pit chance across the race for the selected car" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
+    <p class="key"><span class="k-line"></span>model pit chance <span class="k-thr"></span>decision threshold <span class="k-pit"></span>team pit stop</p>
+  </section>
+
+  <section class="about" aria-labelledby="about-h">
+    <h2 id="about-h">About the model</h2>
+    <div id="card"></div>
+    <p>The model only sees what was known at the start of each lap: tyre age and compound, gaps, pace and degradation, flags and weather. In the rain it switches to intermediates by rule. It learns from what teams did, so it inherits their habits, good and bad. <a href="https://github.com/reemkhattarr/f1-ml/tree/main/01-tire-strategy">How it works</a> · data from <a href="https://docs.fastf1.dev/">FastF1</a>.</p>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime
 from typing import cast
 
 import joblib
@@ -41,6 +42,7 @@ from tire_strategy.models import (
     build_pit_pipeline,
     cross_validate_compound,
     cross_validate_pit,
+    default_split_seasons,
     evaluate_wet_gate,
 )
 from tire_strategy.models.baselines import MostFrequentCompound
@@ -56,15 +58,39 @@ EXPERIMENT = "tire-strategy"
 PIT_HORIZON = 3
 
 
-def _prepare(horizon: int = PIT_HORIZON) -> dict[str, pd.DataFrame]:
-    """Load the dataset, add the pit-window target, split temporally, keep eligible rows."""
-    df = assign_temporal_split(load_dataset())
+def _prepare(horizon: int = PIT_HORIZON) -> tuple[dict[str, pd.DataFrame], dict]:
+    """Load the dataset, add the pit-window target, split temporally, keep eligible rows.
+
+    The split is chosen from the data (see ``default_split_seasons``): the latest
+    season with enough races is held out, so a new regulation era (2026) is what
+    the model is tested on as soon as it has been raced. Returns the splits plus a
+    description of them for the metadata.
+    """
+    df = load_dataset()
+    train_seasons, holdout, val_round_max = default_split_seasons(df)
+    logger.info(
+        "Split: train %s, holdout %d (val rounds <= %d, test after)",
+        list(train_seasons),
+        holdout,
+        val_round_max,
+    )
+    df = assign_temporal_split(df, train_seasons, holdout, val_round_max)
     df = add_pit_window_label(df, horizon=horizon)
     df = df[df["split"].notna() & df["train_eligible"].astype("boolean").fillna(False)]
-    return {
+    splits = {
         name: cast(pd.DataFrame, df[df["split"] == name].copy())
         for name in ("train", "val", "test")
     }
+    empty = [name for name, frame in splits.items() if frame.empty]
+    if empty:
+        raise ValueError(f"Empty split(s) {empty}: the dataset is incomplete, not training.")
+    info = {
+        "train_seasons": list(train_seasons),
+        "holdout_season": holdout,
+        "val_round_max": val_round_max,
+        "n_races": int(cast(pd.DataFrame, df[["year", "round"]]).drop_duplicates().shape[0]),
+    }
+    return splits, info
 
 
 def _slick_pits(frame: pd.DataFrame) -> pd.DataFrame:
@@ -90,7 +116,7 @@ def train() -> dict:
         )
     mlflow.set_experiment(EXPERIMENT)
 
-    splits = _prepare()
+    splits, split_info = _prepare()
     train_df, val_df, test_df = splits["train"], splits["val"], splits["test"]
     # The pit head predicts the *window* target (see PIT_HORIZON).
     y_train = train_df["label_pit_window"].astype(int)
@@ -214,6 +240,8 @@ def train() -> dict:
             "pit_threshold": threshold,
             "scale_pos_weight": scale_pos_weight,
             "slick_compounds": list(SLICK_COMPOUNDS),
+            "split": split_info,
+            "trained_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "metrics": metrics,
         }
         (ARTIFACTS_DIR / "metadata.json").write_text(json.dumps(metadata, indent=2))
