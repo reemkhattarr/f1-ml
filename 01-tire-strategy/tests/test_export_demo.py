@@ -75,3 +75,31 @@ def test_export_writes_index_and_race_files(tmp_path) -> None:
     card = json.loads((out / "data" / "model.json").read_text())
     assert card["metrics"] == {"cv_model_cost_mean": 0.3}
     assert json.loads((out / "data" / "races" / "2026-03.json").read_text())["year"] == 2026
+
+
+def test_export_writes_strategy_files(tmp_path) -> None:
+    from tire_strategy.export_demo import strategy_history
+    from tire_strategy.strategy.params import fit_strategy_params
+
+    from .strategy_fixtures import synthetic_race_laps
+
+    laps = synthetic_race_laps()
+    history = strategy_history(laps)
+    latest = history["Testville"][0]
+    assert (latest["year"], latest["round"]) == (2026, 7)
+    assert len(latest["drivers"]) == 10 and latest["drivers"][0]["pos"] == 1
+    assert all(sum(n for _, n in d["stints"]) == 50 for d in latest["drivers"])
+
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_text("<html></html>")
+    calendar = {"next": {"year": 2026, "round": 23, "circuit": "Testville"}, "races": []}
+    export(
+        _race(2026, 3), _bundle(), {"pit_threshold": 0.5}, out_dir=tmp_path / "out",
+        site_src=site, params=fit_strategy_params(laps), race_laps=laps, calendar=calendar,
+    )  # fmt: skip
+    data = tmp_path / "out" / "data"
+    assert json.loads((data / "strategy_params.json").read_text())["circuits"]["Testville"]
+    assert json.loads((data / "calendar.json").read_text())["next"]["round"] == 23
+    assert "Testville" in json.loads((data / "history.json").read_text())
+    assert not (data / "models.json").exists()  # stub models are not exportable
