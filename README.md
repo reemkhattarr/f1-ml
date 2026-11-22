@@ -8,13 +8,18 @@ sequential deep learning, unsupervised learning — and ships as a live, free de
 Built as a single **uv workspace** (one lockfile, shared toolchain) with a shared
 data foundation that every project depends on.
 
-## Live demo
+## Live tool
 
-**[Tyre strategy replay →](https://reemkhattarr.github.io/f1-ml/)** Pick any race since 2022 and move through it lap by lap: for every car, the model's chance of a pit stop in the next three laps and the tyre it would fit, next to what the team actually did.
+**[Tyre strategy →](https://reemkhattarr.github.io/f1-ml/)** A free, shareable F1 strategy tool:
 
-It is a static site, rebuilt in the cloud every Monday after a race weekend: GitHub Actions adds the new races, retrains the model, runs a quality gate (the new model must beat both baselines and must not be worse than the live one) and publishes to GitHub Pages. Nothing runs locally and nothing costs money.
+- **Next race:** the predicted fastest strategy for the coming grand prix, with pit windows, safety-car odds and what the top ten did there last time.
+- **Planner:** any circuit, any assumptions (race laps, pit loss, tyre wear, tyres available, number of stops). It returns the fastest legal plan, the best plan for each number of stops, and how robust the choice is.
+- **Pit wall:** enter the live state (lap, tyre, age, gaps, safety car, rain) and get a box or stay-out call, priced over the rest of the race, plus a second opinion from a model trained on what teams actually did.
+- **Replay:** any race since 2022, lap by lap, with the model's pit calls against the teams', and each driver's strategy against the engine's fastest plan.
 
-The F1 Data Explorer is being moved off Hugging Face and will come back on the same site.
+The strategy engine and both models run in the browser, so the site is static and costs nothing. It is rebuilt in the cloud every Monday: GitHub Actions adds new races from [OpenF1](https://openf1.org), refits the engine, retrains the models behind a quality gate (a new model must beat both baselines and not be worse than the live one) and publishes to GitHub Pages.
+
+**Full local version.** `just fetch` downloads the latest data and models (no training), then `just app` serves the same site at http://localhost:8000 with extras: load any race live, add new races and refit, and a JSON API (`/api/plan`, `/api/advise`, `/predict`; docs at `/docs`).
 
 ## Structure
 
