@@ -8,8 +8,12 @@ folder can be served by any static host; CI publishes it to GitHub Pages.
 
 Output layout::
 
-    index.html, app.js, style.css    copied from 01-tire-strategy/site/
+    index.html, *.js, style.css      copied from 01-tire-strategy/site/
     data/model.json                  threshold, split, metrics, training date
+    data/models.json                 both models as trees, run in the browser
+    data/strategy_params.json        per-circuit tyre/pit/safety-car parameters
+    data/calendar.json               this season's races and the next one
+    data/history.json                what the top ten did at each circuit lately
     data/races.json                  list of races (year, round, circuit, file)
     data/races/<year>-<round>.json   per-driver laps with model calls vs reality
 """
@@ -19,15 +23,18 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 
+from f1_foundation.circuits import canonical_circuit
 from tire_strategy.config import ARTIFACTS_DIR, PROJECT_ROOT
 from tire_strategy.data import load_dataset
-from tire_strategy.data.features import DEFAULT_WET_COMPOUND
+from tire_strategy.data.features import DEFAULT_WET_COMPOUND, SLICK_COMPOUNDS
+from tire_strategy.export_model import export_models
 from tire_strategy.serving.models import ModelBundle, load_bundle
 
 logger = logging.getLogger(__name__)
@@ -114,6 +121,41 @@ def race_payload(race: pd.DataFrame, bundle: ModelBundle) -> dict:
     }
 
 
+def strategy_history(race_laps: pd.DataFrame, per_circuit: int = 3, top: int = 10) -> dict:
+    """What the top finishers did at each circuit in its latest races."""
+    out: dict[str, list] = {}
+    race_laps = race_laps.copy()
+    race_laps["circuit"] = race_laps["circuit"].map(canonical_circuit)
+    keys = cast(pd.DataFrame, race_laps[["year", "round", "circuit"]]).drop_duplicates()
+    for circuit, group in keys.groupby("circuit"):
+        latest = cast(pd.DataFrame, group).sort_values(["year", "round"]).tail(per_circuit)
+        races = []
+        for year, rnd in zip(latest["year"], latest["round"], strict=True):
+            mask = (race_laps["year"] == year) & (race_laps["round"] == rnd)
+            race = cast(pd.DataFrame, race_laps[mask])
+            total = int(race["lap_number"].max())
+            last = cast(pd.DataFrame, race.sort_values("lap_number")).groupby("driver").tail(1)
+            finishers = cast(pd.DataFrame, last[last["lap_number"] >= total - 1])
+            finishers = finishers.sort_values(["lap_number", "position"], ascending=[False, True])
+            drivers = []
+            ranked = finishers.head(top)
+            for pos, (code, team) in enumerate(
+                zip(ranked["driver"], ranked["team"], strict=True), 1
+            ):
+                laps = cast(pd.DataFrame, race[race["driver"] == code]).sort_values("lap_number")
+                stints = []
+                for _, st in laps.groupby("stint", sort=True):
+                    compound = cast(pd.DataFrame, st)["compound"].iloc[0]
+                    stints.append([_code(compound) or "?", len(st)])
+                drivers.append({"pos": pos, "code": str(code), "team": str(team),
+                                "stints": stints})  # fmt: skip
+            wet = not bool(race["compound"].isin(SLICK_COMPOUNDS).all())
+            races.append({"year": int(year), "round": int(rnd), "laps": total, "wet": wet,
+                          "drivers": drivers})  # fmt: skip
+        out[str(circuit)] = races[::-1]
+    return out
+
+
 def model_card(metadata: dict) -> dict:
     metrics = metadata.get("metrics", {})
     return {
@@ -130,6 +172,9 @@ def export(
     metadata: dict,
     out_dir: Path = OUT_DIR,
     site_src: Path = SITE_SRC,
+    params: dict | None = None,
+    race_laps: pd.DataFrame | None = None,
+    calendar: dict | None = None,
 ) -> list[dict]:
     """Write the static site to ``out_dir`` and return the race index."""
     if out_dir.exists():
@@ -151,14 +196,69 @@ def export(
     (out_dir / "data" / "races.json").write_text(json.dumps(index, separators=(",", ":")))
     (out_dir / "data" / "model.json").write_text(json.dumps(model_card(metadata), indent=1))
     (out_dir / "data" / "metadata.json").write_text(json.dumps(metadata, indent=1))
+    compact = {"separators": (",", ":"), "ensure_ascii": False}
+    if params is not None:
+        (out_dir / "data" / "strategy_params.json").write_text(json.dumps(params, **compact))
+    if race_laps is not None:
+        history = strategy_history(race_laps)
+        (out_dir / "data" / "history.json").write_text(json.dumps(history, **compact))
+    if calendar is not None:
+        (out_dir / "data" / "calendar.json").write_text(json.dumps(calendar, **compact))
+    if hasattr(bundle.pit_model, "calibrated_classifiers_"):
+        models = export_models(bundle.pit_model, bundle.compound_model, bundle.threshold)
+        (out_dir / "data" / "models.json").write_text(json.dumps(models, **compact))
     logger.info("Exported %d races to %s", len(index), out_dir)
     return index
 
 
+def season_calendar(now: datetime | None = None) -> dict:
+    """This season's races (from OpenF1) and the next one to be run."""
+    from f1_foundation.openf1 import race_calendar
+
+    now = now or datetime.now(UTC)
+    races = []
+    for year in (now.year, now.year + 1):
+        try:
+            races += race_calendar(year)
+        except Exception as exc:  # the calendar is a nice-to-have, never fatal
+            logger.warning("No calendar for %s: %s", year, exc)
+    upcoming = [r for r in races if (r.date_end or r.date_start) > now]
+    return {
+        "generated": now.isoformat(timespec="minutes"),
+        "races": [
+            {
+                "year": r.year,
+                "round": r.round,
+                "circuit": r.circuit,
+                "date": r.date_start.isoformat(),
+            }
+            for r in races
+            if r.year == now.year
+        ],
+        "next": None
+        if not upcoming
+        else {
+            "year": upcoming[0].year,
+            "round": upcoming[0].round,
+            "circuit": upcoming[0].circuit,
+            "date": upcoming[0].date_start.isoformat(),
+        },
+    }
+
+
 def main() -> None:
+    from tire_strategy.data.dataset import RACE_LAPS_PATH
+    from tire_strategy.strategy.params import PARAMS_PATH, fit_strategy_params, save_params
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     metadata = json.loads((ARTIFACTS_DIR / "metadata.json").read_text())
-    export(load_dataset(), load_bundle(), metadata)
+    race_laps = pd.read_parquet(RACE_LAPS_PATH) if RACE_LAPS_PATH.exists() else None
+    params = None
+    if race_laps is not None:
+        params = fit_strategy_params(race_laps)
+        save_params(params, PARAMS_PATH)
+    export(load_dataset(), load_bundle(), metadata, params=params, race_laps=race_laps,
+           calendar=season_calendar())  # fmt: skip
 
 
 if __name__ == "__main__":
