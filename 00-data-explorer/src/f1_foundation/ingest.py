@@ -15,6 +15,7 @@ from typing import cast
 import fastf1
 import pandas as pd
 
+from f1_foundation.circuits import canonical_circuit
 from f1_foundation.config import enable_cache
 
 # FastF1 encodes track status per lap as a string of concatenated single-digit
@@ -90,7 +91,7 @@ def load_race(year: int, grand_prix: int | str, session_id: str = "R") -> pd.Dat
     event = session.event
     out["year"] = int(year)
     out["round"] = int(event["RoundNumber"])
-    out["circuit"] = str(event["Location"])
+    out["circuit"] = canonical_circuit(event["Location"])
     out["event_name"] = str(event["EventName"])
     out["session"] = session_id
     out["driver"] = laps["Driver"].astype("string")
