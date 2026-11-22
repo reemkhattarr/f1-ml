@@ -54,14 +54,16 @@ f1_foundation.ingest → labels → leak-safe features → dataset (~176k laps, 
 ```bash
 brew install libomp            # macOS: LightGBM's OpenMP runtime (one-time)
 just install                   # uv sync the workspace
-just data                      # build the dataset from FastF1 (cached); trains on 2022-2025
-just train                     # train + evaluate + log to MLflow + save artifacts
-just serve                     # FastAPI at http://localhost:8000 (docs at /docs)
-just demo                      # interactive Gradio demo
-just check                     # ruff + pyright + pytest (46 tests)
+just fetch                     # latest dataset + trained models from the GitHub release
+just app                       # full tool at http://localhost:8000 (planner, pit wall, replay, API)
+just check                     # ruff + pyright + pytest
 ```
 
-Other recipes: `just tune` (Optuna), `just mlflow-ui`, `just fmt`, `just experiment <name>`.
+Rebuilding things yourself: `just update-openf1` (add new races), `just fit-strategy` (refit the strategy engine), `just train` (retrain the models), `just data` (build the dataset from FastF1, local machines only). Other recipes: `just tune` (Optuna), `just mlflow-ui`, `just fmt`, `just experiment <name>`.
+
+### Strategy engine
+
+`tire_strategy/strategy/` turns the race into one clock: a lap on compound *c* at tyre age *a* costs `offset[c] + wear[c] × a`, a stop costs the circuit's pit loss, and fuel and car pace cancel. For every tyre sequence up to three stops a dynamic programme finds the exact best stint lengths, within real tyre life and the two-compound rule. The parameters are fitted per circuit from races since 2023 (`params.py`): wear from within-stint slopes, compound pace gaps from the same driver's stints in one race (corrected for track evolution), pit loss from in- and out-laps, safety-car odds from race control, tyre life from the 90th percentile of real stints. `engine.py` is mirrored in `site/engine.js`, and the trained models are exported to JSON (`export_model.py`) and run by `site/model.js`; tests check that the browser and Python give the same answers.
 
 ## Repository structure
 
