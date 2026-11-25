@@ -1,16 +1,18 @@
 name: Train & publish tire-strategy model
 
-# Keeps the tire-strategy model and its public demo current, entirely in the cloud.
+# Keeps the tire-strategy tool current, entirely in the cloud.
 #
-# 1. Load the existing dataset (GitHub release "data-latest"; first run falls back
-#    to the old Hugging Face Space) and add any races it does not have yet.
-# 2. Retrain when there are new races (or when run by hand), holding out the
-#    latest season with enough races (2026) as the test set.
-# 3. Quality gate: publish only if the new model beats both baselines and is not
-#    worse than the live model (see tire_strategy/gate.py).
-# 4. Export the race-replay site and deploy it to GitHub Pages:
-#    https://reemkhattarr.github.io/f1-ml/
-# 5. Save the dataset and model files to the "data-latest" release.
+# 1. Load the data from the "data-latest" release (first run: the old Hugging Face
+#    Space) and add every finished race that is missing, from OpenF1. (F1's own
+#    timing server, used by FastF1, refuses cloud machines; OpenF1 does not.)
+# 2. Save the data back to the release, so nothing is ever downloaded twice.
+# 3. Retrain when there are new races (or when run by hand), holding out the
+#    latest season with enough races as the test set.
+# 4. Quality gate: the new model replaces the live one only if it beats both
+#    baselines and is not worse than the live model (tire_strategy/gate.py).
+#    Otherwise the live model stays and the run shows a warning.
+# 5. Rebuild the site every run (next-race prediction, strategy engine fitted on
+#    the latest races, replay) and deploy it to https://reemkhattarr.github.io/f1-ml/
 #
 # Runs every Monday after the race weekend, and on demand from the Actions tab.
 
@@ -18,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       retrain:
-        description: "Retrain and republish even if there are no new races"
+        description: "Retrain even if there are no new races"
         type: boolean
         default: true
   schedule:
@@ -26,7 +28,7 @@ on:
 
 permissions:
   contents: write   # update the data-latest release
-  pages: write      # deploy the demo
+  pages: write      # deploy the site
   id-token: write   # required by deploy-pages
 
 concurrency:
@@ -42,9 +44,7 @@ env:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    outputs:
-      publish: ${{ steps.gate.outputs.publish }}
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
@@ -52,51 +52,52 @@ jobs:
           enable-cache: true
       - run: uv python install 3.11
       - run: uv sync --all-packages --locked
-      - name: Cache FastF1 downloads
+      - name: Cache OpenF1 downloads
         uses: actions/cache@v5
         with:
-          path: data/cache
-          key: fastf1-cache-${{ github.run_id }}
-          restore-keys: fastf1-
+          path: data/cache/openf1
+          key: openf1-${{ github.run_id }}
+          restore-keys: openf1-
 
-      - name: Load the existing dataset
+      - name: Make sure the release exists
         run: |
-          mkdir -p "$DATA"
-          if gh release download data-latest --pattern '*.parquet' --dir "$DATA" --clobber 2>/dev/null; then
-            echo "Loaded dataset from the data-latest release"
-          else
+          gh release view data-latest >/dev/null 2>&1 || gh release create data-latest \
+            --title "Latest data and model" --notes "Updated automatically by the training workflow." --latest=false
+
+      - name: Load the existing data
+        run: |
+          mkdir -p "$DATA" "$ARTIFACTS"
+          gh release download data-latest --pattern '*.parquet' --dir "$DATA" --clobber || true
+          if [ ! -f "$DATA/tire_strategy_dataset.parquet" ]; then
             for f in tire_strategy_dataset results; do
               uv run hf download reemkhattar/f1-tire-strategy "data/processed/$f.parquet" \
                 --repo-type space --local-dir /tmp/seed >/dev/null 2>&1 \
                 && cp "/tmp/seed/data/processed/$f.parquet" "$DATA/" || true
             done
-            echo "Loaded dataset from the Hugging Face Space (first run)"
+            echo "Seeded the dataset from the Hugging Face Space (first run)"
           fi
           if [ ! -f "$DATA/tire_strategy_dataset.parquet" ]; then
-            echo "::error::No existing dataset found; refusing to rebuild from scratch (FastF1 rate limit)."
+            echo "::error::No existing dataset found."
             exit 1
           fi
+          ls -la "$DATA"
 
-      - name: Add new races
+      - name: Add new races (OpenF1)
         id: update
         run: |
           count() { uv run python -c "import pandas as pd; df = pd.read_parquet('$DATA/tire_strategy_dataset.parquet'); print(len(df[['year', 'round']].drop_duplicates()))"; }
           before="$(count)"
-          uv run python -m tire_strategy.data.dataset --update 2022 2023 2024 2025 2026
+          uv run python -m tire_strategy.data.dataset --update --source openf1 2023 2024 2025 2026
           after="$(count)"
-          echo "Races before: $before, after: $after"
+          echo "Races in the model data: $before -> $after"
           echo "new=$((after - before))" >> "$GITHUB_OUTPUT"
           if [ "$after" -lt "$before" ]; then
             echo "::error::Dataset shrank ($before -> $after races); stopping."
             exit 1
           fi
 
-      - name: Save the dataset
-        if: steps.update.outputs.new != '0'
-        run: |
-          gh release view data-latest >/dev/null 2>&1 || gh release create data-latest \
-            --title "Latest data and model" --notes "Updated automatically by the training workflow." --latest=false
-          gh release upload data-latest "$DATA"/*.parquet --clobber
+      - name: Save the data
+        run: gh release upload data-latest "$DATA"/*.parquet --clobber
 
       - name: Train
         id: train
@@ -108,32 +109,34 @@ jobs:
         if: steps.train.outcome == 'success'
         run: |
           curl -fsSL https://reemkhattarr.github.io/f1-ml/data/metadata.json -o /tmp/live.json || : > /tmp/live.json
-          uv run python -m tire_strategy.gate "$ARTIFACTS/metadata.json" /tmp/live.json
-          echo "publish=true" >> "$GITHUB_OUTPUT"
+          if uv run python -m tire_strategy.gate "$ARTIFACTS/metadata.json" /tmp/live.json; then
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::The new model did not pass the quality gate; the live model stays."
+          fi
 
-      - name: Nothing new
-        if: steps.train.outcome == 'skipped'
-        run: echo "::notice::No new races and no retrain requested - the live model stays."
+      - name: Use the live model
+        if: steps.gate.outputs.passed != 'true'
+        run: |
+          rm -f "$ARTIFACTS"/*.joblib "$ARTIFACTS"/metadata.json
+          gh release download data-latest --pattern '*.joblib' --pattern 'metadata.json' --dir "$ARTIFACTS" --clobber
 
-      - name: Build the demo site
-        if: steps.gate.outputs.publish == 'true'
-        run: uv run python -m tire_strategy.export_demo
+      - name: Save the new model
+        if: steps.gate.outputs.passed == 'true'
+        run: gh release upload data-latest "$ARTIFACTS"/*.joblib "$ARTIFACTS"/metadata.json --clobber
+
+      - name: Build the site
+        run: |
+          uv run python -m tire_strategy.export_demo
+          gh release upload data-latest "$DATA"/strategy_params.json --clobber
 
       - uses: actions/upload-pages-artifact@v5
-        if: steps.gate.outputs.publish == 'true'
         with:
           path: ${{ env.SITE }}
 
-      - name: Save the model files
-        if: steps.gate.outputs.publish == 'true'
-        run: |
-          gh release view data-latest >/dev/null 2>&1 || gh release create data-latest \
-            --title "Latest data and model" --notes "Updated automatically by the training workflow." --latest=false
-          gh release upload data-latest "$ARTIFACTS"/*.joblib "$ARTIFACTS"/metadata.json --clobber
-
   deploy:
     needs: train
-    if: needs.train.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

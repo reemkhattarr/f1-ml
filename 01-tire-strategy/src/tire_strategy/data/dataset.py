@@ -23,14 +23,26 @@ from pathlib import Path
 import fastf1
 import pandas as pd
 
+from f1_foundation import retired_drivers
+from f1_foundation.circuits import canonical_circuit
+from f1_foundation.openf1 import (
+    OpenF1Client,
+    completed_races,
+    load_race_openf1,
+    load_results_openf1,
+)
 from tire_strategy.config import DATA_DIR, enable_cache
 from tire_strategy.data.features import build_features
-from tire_strategy.data.labels import load_labelled_race
+from tire_strategy.data.labels import build_labels, load_labelled_race
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SEASONS: tuple[int, ...] = (2022, 2023, 2024)
 DATASET_PATH: Path = DATA_DIR / "processed" / "tire_strategy_dataset.parquet"
+# Raw per-lap race tables (with lap times), the input of the strategy engine.
+RACE_LAPS_PATH: Path = DATA_DIR / "processed" / "race_laps.parquet"
+# OpenF1 coverage starts with the 2023 season.
+OPENF1_FIRST_SEASON = 2023
 
 
 def iter_calendar(seasons: tuple[int, ...]) -> list[tuple[int, int]]:
@@ -96,8 +108,61 @@ def build_dataset(
 
 
 def load_dataset(path: Path = DATASET_PATH) -> pd.DataFrame:
-    """Load a previously built dataset."""
-    return pd.read_parquet(path)
+    """Load a previously built dataset (circuit names normalised across sources)."""
+    df = pd.read_parquet(path)
+    df["circuit"] = df["circuit"].map(canonical_circuit)
+    return df
+
+
+def _keys(df: pd.DataFrame | None) -> set[tuple[int, int]]:
+    if df is None or df.empty:
+        return set()
+    pairs = df[["year", "round"]].drop_duplicates().to_numpy()
+    return {(int(y), int(r)) for y, r in pairs}
+
+
+def update_from_openf1(
+    seasons: tuple[int, ...],
+    dataset_path: Path = DATASET_PATH,
+    laps_path: Path = RACE_LAPS_PATH,
+    client: OpenF1Client | None = None,
+) -> tuple[int, int]:
+    """Add every finished race that is missing, using OpenF1 (works from the cloud).
+
+    Keeps two files current: the modelling dataset (labels + features, one row per
+    lap) and the raw race laps the strategy engine fits on. Races already present
+    are not fetched again. Returns ``(new_dataset_races, new_lap_races)``.
+    """
+    client = client or OpenF1Client()
+    seasons = tuple(s for s in seasons if s >= OPENF1_FIRST_SEASON)
+    dataset = pd.read_parquet(dataset_path) if dataset_path.exists() else None
+    laps = pd.read_parquet(laps_path) if laps_path.exists() else None
+    have_ds, have_laps = _keys(dataset), _keys(laps)
+
+    new_ds: list[pd.DataFrame] = []
+    new_laps: list[pd.DataFrame] = []
+    for race in completed_races(seasons, client):
+        key = (race.year, race.round)
+        if key in have_ds and key in have_laps:
+            continue
+        try:
+            raw = load_race_openf1(race.year, race, client)
+            if key not in have_laps:
+                new_laps.append(raw)
+            if key not in have_ds:
+                results = load_results_openf1(race.year, race, client)
+                new_ds.append(build_features(build_labels(raw, retired=retired_drivers(results))))
+            logger.info("OpenF1: %s round %s (%s)", race.year, race.round, race.circuit)
+        except Exception as exc:  # one bad race must not stop the update
+            logger.warning("Skipping %s round %s: %s", race.year, race.round, exc)
+
+    for existing, new, path in ((dataset, new_ds, dataset_path), (laps, new_laps, laps_path)):
+        if new:
+            parts = ([existing] if existing is not None else []) + new
+            path.parent.mkdir(parents=True, exist_ok=True)
+            pd.concat(parts, ignore_index=True).to_parquet(path, index=False)
+    logger.info("Added %d races to the dataset, %d to the race laps.", len(new_ds), len(new_laps))
+    return len(new_ds), len(new_laps)
 
 
 def update_dataset(
@@ -155,10 +220,20 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Incrementally add only missing races (backfill / new races).",
     )
+    parser.add_argument(
+        "--source",
+        choices=("fastf1", "openf1"),
+        default="fastf1",
+        help="Where to fetch races: FastF1 (local machines) or OpenF1 (works in the cloud).",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     seasons = tuple(args.seasons)
+    if args.source == "openf1":
+        n_ds, n_laps = update_from_openf1(seasons, dataset_path=args.out)
+        print(f"OpenF1 update: {n_ds} new races in the dataset, {n_laps} in the race laps.")
+        return 0
     data = (
         update_dataset(seasons, out_path=args.out)
         if args.update

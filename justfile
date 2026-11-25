@@ -56,16 +56,34 @@ update-data *SEASONS:
     uv run python -m tire_strategy.data.dataset --update {{SEASONS}}
 
 # Post-race refresh: add new races and retrain (the cloud workflow does this every
-# Monday and publishes the demo; this is the local equivalent, without publishing).
+# Monday and publishes the site; this is the local equivalent, without publishing).
 refresh:
-    uv run python -m tire_strategy.data.dataset --update 2022 2023 2024 2025 2026
+    just update-openf1
     just train
 
-# Build the race-replay website from the dataset + trained model (-> deploy/site_build).
+# Add every finished race missing from the data, via OpenF1 (works anywhere, incl. CI).
+update-openf1:
+    uv run python -m tire_strategy.data.dataset --update --source openf1 2023 2024 2025 2026
+
+# Download the latest dataset + trained models from the GitHub release (no training).
+fetch:
+    uv run python -m tire_strategy.fetch_latest
+
+# Fit the strategy engine (tyre wear, pace gaps, pit loss, safety-car odds per circuit).
+fit-strategy:
+    uv run python -m tire_strategy.strategy.params
+
+# The full app at http://localhost:8000: planner, pit wall, replay, plus live race
+# loading and refresh. First time on a new machine: `just fetch`.
+app:
+    uv run python -m tire_strategy.export_demo
+    uv run uvicorn tire_strategy.serving.app:app --port 8000
+
+# Build the static website from the data + trained models (-> deploy/site_build).
 export-demo:
     uv run python -m tire_strategy.export_demo
 
-# Preview the race-replay website at http://localhost:8000 (run `just export-demo` first).
+# Preview the static website at http://localhost:8000 (run `just export-demo` first).
 preview-demo:
     cd 01-tire-strategy/deploy/site_build && python3 -m http.server 8000
 

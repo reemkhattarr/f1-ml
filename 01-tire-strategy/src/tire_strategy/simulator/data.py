@@ -41,9 +41,9 @@ def _bool(df: pd.DataFrame, name: str) -> pd.Series:
     return cast(pd.Series, df[name]).fillna(False).astype(bool)
 
 
-def clean_slick_laps(race: pd.DataFrame) -> pd.DataFrame:
-    """Clean slick laps from one ingested race, with the columns the model needs."""
-    mask = (
+def clean_slick_mask(race: pd.DataFrame) -> pd.Series:
+    """True for green-flag, timed, accurate slick laps that are not pit laps."""
+    return (
         ~_bool(race, "is_in_lap")
         & ~_bool(race, "is_out_lap")
         & ~_bool(race, "under_caution")
@@ -52,6 +52,11 @@ def clean_slick_laps(race: pd.DataFrame) -> pd.DataFrame:
         & cast(pd.Series, race["lap_time_s"]).notna()
         & cast(pd.Series, race["compound"]).isin(SLICK_COMPOUNDS)
     )
+
+
+def clean_slick_laps(race: pd.DataFrame) -> pd.DataFrame:
+    """Clean slick laps from one ingested race, with the columns the model needs."""
+    mask = clean_slick_mask(race)
     out = cast(pd.DataFrame, race.loc[mask]).rename(columns={"tyre_life": "tyre_age"})
     return cast(pd.DataFrame, out[_COLUMNS]).reset_index(drop=True)
 
