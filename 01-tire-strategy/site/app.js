@@ -1,7 +1,7 @@
 // Boot: load the exported data, wire the tabs, and switch on local-only tools.
 "use strict";
 
-const TABS = ["next", "plan", "advise", "replay", "model"];
+const TABS = ["next", "plan", "advise", "replay", "record", "model"];
 
 function route() {
   const tab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "next";
@@ -74,12 +74,14 @@ async function main() {
   window.addEventListener("hashchange", route);
   route();
   try {
-    const [races, card, params, calendar, history, models] = await Promise.all([
+    const [races, card, params, calendar, history, models, record] = await Promise.all([
       getJSON("data/races.json"), getJSON("data/model.json"),
       getJSON("data/strategy_params.json"), getJSON("data/calendar.json", true),
       getJSON("data/history.json", true), getJSON("data/models.json", true),
+      getJSON("data/track_record.json", true),
     ]);
-    Object.assign(App.data, { races, card, params, calendar, history, models });
+    Object.assign(App.data, { races, card, params, calendar, history, models, record });
+    Record.init(record);
     renderModelCard(card);
     renderEngineCard(params);
     Planner.initNext();

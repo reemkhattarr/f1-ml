@@ -10,6 +10,11 @@ const Planner = (() => {
       for (const [c, v] of Object.entries(p.degradation)) deg[c] = v * overrides.wear;
       p.degradation = deg;
     }
+    if (overrides.stintCap) {
+      const life = {};
+      for (const [c, v] of Object.entries(p.tyre_life)) life[c] = Math.min(v, overrides.stintCap);
+      p.tyre_life = life;
+    }
     return p;
   }
 
@@ -32,7 +37,8 @@ const Planner = (() => {
         el("div", {}, el("dt", { text: "Safety car or VSC" }), el("dd", { text: pct(p.p_caution) })),
         el("div", {}, el("dt", { text: "Full safety car" }), el("dd", { text: pct(p.p_safety_car) })),
         c.track_temp != null ? el("div", {}, el("dt", { text: "Typical track temp" }), el("dd", { text: `${c.track_temp} °C` })) : null),
-      table, el("p", { class: "sub", text: sources }));
+      table, el("p", { class: "sub", text: sources }),
+      c.note ? el("p", { class: "warn", text: c.note }) : null);
   }
 
   function renderPlan(container, p, laps, opts = {}) {
@@ -90,6 +96,7 @@ const Planner = (() => {
       circuit, wear, compounds,
       laps: Number($("p-laps").value),
       pitLoss: Number($("p-pit").value) || null,
+      stintCap: Number($("p-cap").value) || null,
       maxStops: Number($("p-stops").value),
       rule: $("p-rule").checked,
     };
@@ -109,6 +116,7 @@ const Planner = (() => {
     $("p-laps").value = p.race_laps || 57;
     $("p-pit").value = Number(p.pit_loss).toFixed(1);
     $("p-wear").value = 100;
+    $("p-cap").value = "";
     update();
   }
 
@@ -132,6 +140,8 @@ const Planner = (() => {
     $("next-h").textContent = `${next.circuit} · round ${next.round}`;
     $("next-meta").textContent = `${formatDate(next.date)} · ${laps} laps · prediction from the strategy engine, refreshed every Monday.` +
       (p.known ? "" : " No previous race here, so it uses all-circuit averages.");
+    const note = App.data.params.circuits[next.circuit]?.note;
+    if (note) $("next-plan").before(el("p", { class: "warn", text: note }));
     renderPlan($("next-plan"), p, laps);
     renderHistory($("next-history"), App.data.history?.[next.circuit]);
     $("next-open").addEventListener("click", () => setCircuit(next.circuit));
