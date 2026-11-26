@@ -33,7 +33,7 @@ import pandas as pd
 from f1_foundation.circuits import canonical_circuit
 from tire_strategy.config import ARTIFACTS_DIR, PROJECT_ROOT
 from tire_strategy.data import load_dataset
-from tire_strategy.data.features import DEFAULT_WET_COMPOUND, SLICK_COMPOUNDS
+from tire_strategy.data.features import DEFAULT_WET_COMPOUND
 from tire_strategy.export_model import export_models
 from tire_strategy.serving.models import ModelBundle, load_bundle
 
@@ -149,7 +149,7 @@ def strategy_history(race_laps: pd.DataFrame, per_circuit: int = 3, top: int = 1
                     stints.append([_code(compound) or "?", len(st)])
                 drivers.append({"pos": pos, "code": str(code), "team": str(team),
                                 "stints": stints})  # fmt: skip
-            wet = not bool(race["compound"].isin(SLICK_COMPOUNDS).all())
+            wet = bool(race["compound"].isin(["INTERMEDIATE", "WET"]).any())
             races.append({"year": int(year), "round": int(rnd), "laps": total, "wet": wet,
                           "drivers": drivers})  # fmt: skip
         out[str(circuit)] = races[::-1]
@@ -175,6 +175,7 @@ def export(
     params: dict | None = None,
     race_laps: pd.DataFrame | None = None,
     calendar: dict | None = None,
+    track_record: dict | None = None,
 ) -> list[dict]:
     """Write the static site to ``out_dir`` and return the race index."""
     if out_dir.exists():
@@ -204,6 +205,8 @@ def export(
         (out_dir / "data" / "history.json").write_text(json.dumps(history, **compact))
     if calendar is not None:
         (out_dir / "data" / "calendar.json").write_text(json.dumps(calendar, **compact))
+    if track_record is not None:
+        (out_dir / "data" / "track_record.json").write_text(json.dumps(track_record, **compact))
     if hasattr(bundle.pit_model, "calibrated_classifiers_"):
         models = export_models(bundle.pit_model, bundle.compound_model, bundle.threshold)
         (out_dir / "data" / "models.json").write_text(json.dumps(models, **compact))
@@ -248,17 +251,32 @@ def season_calendar(now: datetime | None = None) -> dict:
 
 def main() -> None:
     from tire_strategy.data.dataset import RACE_LAPS_PATH
-    from tire_strategy.strategy.params import PARAMS_PATH, fit_strategy_params, save_params
+    from tire_strategy.strategy import track_record as tr
+    from tire_strategy.strategy.params import (
+        PARAMS_PATH,
+        check_params,
+        fit_strategy_params,
+        save_params,
+    )
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     metadata = json.loads((ARTIFACTS_DIR / "metadata.json").read_text())
     race_laps = pd.read_parquet(RACE_LAPS_PATH) if RACE_LAPS_PATH.exists() else None
-    params = None
+    params = record = None
+    calendar = season_calendar()
     if race_laps is not None:
         params = fit_strategy_params(race_laps)
+        problems = check_params(params)
+        if problems:
+            # Never publish impossible numbers: fail the run, the live site stays.
+            raise SystemExit("Strategy parameters failed the sanity check:\n" + "\n".join(problems))
         save_params(params, PARAMS_PATH)
+        now = datetime.now(UTC).isoformat(timespec="minutes")
+        log = tr.update_predictions(tr.load_predictions(), params, calendar, race_laps, now)
+        tr.PREDICTIONS_PATH.write_text(json.dumps(log, indent=1, ensure_ascii=False))
+        record = {**tr.backtest(race_laps), "live": log, "updated": now}
     export(load_dataset(), load_bundle(), metadata, params=params, race_laps=race_laps,
-           calendar=season_calendar())  # fmt: skip
+           calendar=calendar, track_record=record)  # fmt: skip
 
 
 if __name__ == "__main__":
