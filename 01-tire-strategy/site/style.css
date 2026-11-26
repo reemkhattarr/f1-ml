@@ -159,3 +159,9 @@ input[type=checkbox] { accent-color: var(--purple); width: 1rem; height: 1rem; }
   .tower td, .tower th { padding: .35rem .4rem; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.record td.hit { color: var(--inter); font-weight: 700; }
+.record td.miss { color: var(--muted); }
+.record tbody tr { cursor: default; }
+.record tbody tr:hover { background: none; }
+.lead-sm { font-size: 1.15rem; font-weight: 700; max-width: 46rem; margin: 0 0 1rem; }

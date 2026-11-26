@@ -128,8 +128,9 @@ jobs:
 
       - name: Build the site
         run: |
+          gh release download data-latest --pattern 'predictions.json' --dir "$DATA" --clobber || true
           uv run python -m tire_strategy.export_demo
-          gh release upload data-latest "$DATA"/strategy_params.json --clobber
+          gh release upload data-latest "$DATA"/strategy_params.json "$DATA"/predictions.json --clobber
 
       - uses: actions/upload-pages-artifact@v5
         with:

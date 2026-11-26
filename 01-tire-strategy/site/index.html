@@ -19,6 +19,7 @@
     <a href="#plan" data-tab="plan">Planner</a>
     <a href="#advise" data-tab="advise">Pit wall</a>
     <a href="#replay" data-tab="replay">Replay</a>
+    <a href="#record" data-tab="record">Track record</a>
     <a href="#model" data-tab="model">How it works</a>
   </nav>
 </header>
@@ -42,6 +43,7 @@
       <label class="grow">Circuit <select id="p-circuit"></select></label>
       <label>Race laps <input id="p-laps" type="number" min="5" max="90" required></label>
       <label>Pit loss (s) <input id="p-pit" type="number" min="5" max="60" step="0.1"></label>
+      <label>Stint cap (laps) <input id="p-cap" type="number" min="5" max="80" placeholder="none"></label>
       <label>Most stops <select id="p-stops"><option>1</option><option>2</option><option selected>3</option></select></label>
       <label class="grow">Tyre wear <output id="p-wear-out">100%</output>
         <input id="p-wear" type="range" min="50" max="160" step="5" value="100">
@@ -120,11 +122,18 @@
     </section>
   </section>
 
+  <section id="tab-record" class="tab" aria-labelledby="rec-h" hidden>
+    <h2 id="rec-h">Does the planner get it right?</h2>
+    <p class="intro">Every past race replanned with only the data available before it, then compared with what the top ten finishers actually did.</p>
+    <div id="record"><p class="status">Loading…</p></div>
+  </section>
+
   <section id="tab-model" class="tab about" aria-labelledby="about-h" hidden>
     <h2 id="about-h" class="visually-hidden">How it works</h2>
     <h3>Strategy engine (planner and pit wall)</h3>
     <p>Each lap on a tyre costs its pace gap to a fresh medium plus its wear times the tyre's age; each stop costs the circuit's pit loss. Fuel and car pace are the same whatever the strategy, so they cancel. The engine tries every tyre sequence up to three stops and finds the best stint lengths for each exactly. It only proposes stints as long as teams have really run at that circuit, and it enforces the two-compound rule.</p>
-    <p>The numbers come from races since 2023, with the latest two seasons at each circuit counting: wear from how lap times grow within a stint, pace gaps between compounds from the same driver's stints in the same race (corrected for the track getting faster), pit loss from in- and out-laps, and safety-car odds from race control. How much cheaper a stop is under a safety car is an assumption, not a measurement.</p>
+    <p>Tyre wear is measured at each circuit from its two latest races: how much slower each lap gets as a tyre ages, comparing every driver with themselves in the same race, with fuel burn and the track getting faster taken out. Circuits with few laps on a compound lean on the all-circuit average. The pace gap between compounds is hard to measure from races, because drivers manage their pace, so it is a standard estimate (soft 0.4 s faster than medium, hard 0.3 s slower) moved halfway toward what the latest season shows. Pit loss comes from in- and out-laps, safety-car odds from race control. How much cheaper a stop is under a safety car is an assumption, not a measurement.</p>
+    <p>Physical limits are enforced before anything is published: wear is never negative, softer tyres are faster and wear at least as fast as harder ones, and a softer tyre never runs longer than a harder one.</p>
     <div id="engine-card"></div>
     <h3>Pit and tyre models (second opinion and replay)</h3>
     <p>Two LightGBM models trained on every lap since 2022: one gives the chance a car stops within three laps, the other picks the tyre. They only see what was known at the start of the lap, and they learn what teams did, habits included. In the rain the tyre is chosen by rule (intermediates).</p>
@@ -144,6 +153,7 @@
 <script src="replay.js"></script>
 <script src="planner.js"></script>
 <script src="advisor.js"></script>
+<script src="record.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

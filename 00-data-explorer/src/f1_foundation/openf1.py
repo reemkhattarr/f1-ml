@@ -243,6 +243,15 @@ def race_table(
     df["lap_number"] = df["lap_number"].astype(int)
     df["date_start"] = pd.to_datetime(df["date_start"], utc=True, format="ISO8601")
     df = cast(pd.DataFrame, df.sort_values(["driver_number", "lap_number"])).reset_index(drop=True)
+    # Some laps come without a start time (often lap 1 or a lap with a timing gap):
+    # take it from the previous lap's start plus its duration when that is known.
+    missing = cast(pd.Series, df["date_start"].isna())
+    if bool(missing.any()):
+        seconds = cast(pd.Series, pd.to_numeric(df["lap_duration"], errors="coerce"))
+        duration = cast(pd.Series, pd.to_timedelta(seconds, unit="s"))
+        by_driver = df.groupby("driver_number")
+        prev_end = by_driver["date_start"].shift(1) + duration.groupby(df["driver_number"]).shift(1)
+        df.loc[missing, "date_start"] = prev_end[missing]
 
     lap_time = cast(pd.Series, pd.to_numeric(df["lap_duration"], errors="coerce"))
     next_start = df.groupby("driver_number")["date_start"].shift(-1)
@@ -303,13 +312,15 @@ def race_table(
         w = pd.DataFrame(weather)
         w["date"] = pd.to_datetime(w["date"], utc=True, format="ISO8601")
         w = w.sort_values("date")
+        timed = cast(pd.DataFrame, df.loc[df["date_start"].notna(), ["date_start"]])
         merged = pd.merge_asof(
-            df[["date_start"]].reset_index().sort_values("date_start"),
+            timed.reset_index().sort_values("date_start"),
             w,
             left_on="date_start",
             right_on="date",
             direction="nearest",
         ).set_index("index")
+        merged = merged.reindex(df.index)  # laps with no time at all get no weather
         df["air_temp"] = pd.to_numeric(merged["air_temperature"], errors="coerce")
         df["track_temp"] = pd.to_numeric(merged["track_temperature"], errors="coerce")
         rain = cast(pd.Series, pd.to_numeric(merged["rainfall"], errors="coerce"))
