@@ -79,6 +79,17 @@ def test_race_table_tyres_pits_and_flags() -> None:
     assert pd.isna(ver.loc[1, "lap_time_s"]) and ver.loc[2, "lap_time_s"] == 90.0
 
 
+def test_laps_without_start_time_are_kept() -> None:
+    laps = _laps()
+    laps[2]["date_start"] = None  # VER lap 3: no start time (seen in real OpenF1 data)
+    laps[0]["date_start"] = None  # VER lap 1: nothing before it to infer from
+    df = race_table(laps, **PAYLOAD, year=2026, round_number=21, circuit="São Paulo")
+    ver = df[df["driver"] == "VER"].set_index("lap_number")
+    assert len(ver) == 8
+    assert ver.loc[3, "track_temp"] == 41.0  # start time inferred from lap 2
+    assert ver.loc[4, "is_in_lap"]
+
+
 def test_positions_follow_line_crossings() -> None:
     df = _table()
     lap3 = df[df["lap_number"] == 3].set_index("driver")["position"]
