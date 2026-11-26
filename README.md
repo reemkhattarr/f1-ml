@@ -16,6 +16,7 @@ data foundation that every project depends on.
 - **Planner:** any circuit, any assumptions (race laps, pit loss, tyre wear, tyres available, number of stops). It returns the fastest legal plan, the best plan for each number of stops, and how robust the choice is.
 - **Pit wall:** enter the live state (lap, tyre, age, gaps, safety car, rain) and get a box or stay-out call, priced over the rest of the race, plus a second opinion from a model trained on what teams actually did.
 - **Replay:** any race since 2022, lap by lap, with the model's pit calls against the teams', and each driver's strategy against the engine's fastest plan.
+- **Track record:** every race since 2024 replanned using only earlier races and compared with what the top ten did, against two simple baselines, plus each weekly prediction scored after the race.
 
 The strategy engine and both models run in the browser, so the site is static and costs nothing. It is rebuilt in the cloud every Monday: GitHub Actions adds new races from [OpenF1](https://openf1.org), refits the engine, retrains the models behind a quality gate (a new model must beat both baselines and not be worse than the live one) and publishes to GitHub Pages.
 
